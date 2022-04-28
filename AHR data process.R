@@ -151,7 +151,7 @@ VM_2 <- read_excel("vm2.xls", sheet = "A") %>%
   select(state, total_VMT, rural_VMT, urban_VMT)
 
 #Bridge data
-bridge_raw <- read_excel("fccount21.xlsx", sheet = "2020")  #Should we choose 2020 or 2021 here?
+bridge_raw <- read_excel("fccount21.xlsx", sheet = "2021")  
 
 bridge_total <- bridge_raw[1:58,] %>% 
   rename(state = 1) %>% 
