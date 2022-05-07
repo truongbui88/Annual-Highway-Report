@@ -1,0 +1,99 @@
+---
+title: "Using UMR instead of INRIX?"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(stringr)
+library(modelr)
+library(dplyr)
+library(psych)
+options(scipen=999)
+```
+
+UMR report has 2020 data of Annual Hours of Delay per auto commuter. This data looks quite similar to INRIX data in terms of distribution. An advantage of UMR is its fullness (INRIX that has 50% missing data). 
+
+```{r}
+inrix <- read_csv("inrix data 2021.csv")
+```
+
+
+```{r}
+library(stringr)
+umr_2020 <- rio::import("Copy of complete-data-2021-umr-by-tti.xlsx") %>% filter(Year == "2020")
+
+umr_2020_hours_delay <- umr_2020 %>% 
+  rename(auto_commuters = Auto,
+    hours_delay_perAuto_commuter = `...24`, 
+    population = `Population...6`, 
+    city = `Urban Area`, 
+    state = Primary) %>% 
+  
+  select(city, state, auto_commuters, population,hours_delay_perAuto_commuter ) %>% 
+  mutate(auto_commuters = as.numeric(auto_commuters)*1000,
+  population = as.numeric(population)*1000,
+  hours_delay_perAuto_commuter = as.numeric(hours_delay_perAuto_commuter)) 
+
+```
+
+Distribution of INRIX
+```{r}
+congestion_data <- readRDS("congestion_data.RDS") 
+  hist(congestion_data$congestion_hours, main = "Histogram of Congestion Hours using INRIX data", col = "lightblue", border = none)
+  describe(congestion_data$congestion_hours) %>% select(n, mean, sd, median, min, max)
+```
+
+Distribution of UMR
+```{r}
+  hist(umr_2020_hours_delay$hours_delay_perAuto_commuter, main = "Histogram of Delay Hours using UMR data", col = "darkgreen", border = none)
+  describe(umr_2020_hours_delay$hours_delay_perAuto_commuter) %>% select(n, mean, sd, median, min, max)
+```
+
+
+Delay hours in UMR data has no missing values, less scatter (smaller standard deviation), less extreme values (smaller max value)
+
+```{r}
+umr_inrix <- umr_2020_hours_delay %>% arrange(city) %>% 
+  mutate(city = str_sub(city, end = -4)) %>% 
+  left_join(inrix) %>% 
+  filter(!is.na(hours_delay_perAuto_commuter)) 
+
+umr_inrix %>% 
+  ggplot(aes(auto_commuters, hours_delay_perAuto_commuter)) +
+  geom_point(color = "gray") +
+  geom_point(aes(auto_commuters, hours_lost_in_congestion), color = "blue") + 
+  labs(title = "INRIX data (blue) vs. UMR data (gray)",
+       caption = "Three large cities: New York-Newark NY-NJ, Los Angeles-Long Beach-Anaheim, Chicago IL") +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+umr_inrix %>% arrange(desc(auto_commuters)) %>% slice(-(1:3)) %>% # take out 3 biggest cities with extreme values
+  ggplot(aes(auto_commuters, hours_delay_perAuto_commuter)) +
+  geom_point(color = "gray") +
+  geom_point(aes(auto_commuters, hours_lost_in_congestion), color = "blue") + 
+  labs(title = "INRIX data (blue) vs. UMR data (gray), excluding 3 largest cities") +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+congestion_data_summary_UMR <- umr_inrix %>% arrange(state) %>% 
+  group_by(state) %>% 
+  summarise(state_delay_hours_perAuto = sum(hours_delay_perAuto_commuter),
+            state_tot_commuters = sum(auto_commuters),
+            state_tot_delay_hours = state_delay_hours_perAuto*state_tot_commuters) %>% select(-state_delay_hours_perAuto) %>% 
+  ungroup() 
+
+saveRDS(congestion_data_summary_UMR, "congestion_data_summary_UMR.RDS")
+```
+
