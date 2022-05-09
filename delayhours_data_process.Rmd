@@ -4,13 +4,14 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 library(tidyverse)
 library(readxl)
 library(janitor)
 library(stringr)
 library(modelr)
 library(dplyr)
+library(stringr)
 library(psych)
 options(scipen=999)
 ```
@@ -23,7 +24,7 @@ inrix <- read_csv("inrix data 2021.csv")
 
 
 ```{r}
-library(stringr)
+
 umr_2020 <- rio::import("Copy of complete-data-2021-umr-by-tti.xlsx") %>% filter(Year == "2020")
 
 umr_2020_hours_delay <- umr_2020 %>% 

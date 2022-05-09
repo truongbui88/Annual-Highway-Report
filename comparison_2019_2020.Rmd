@@ -1,18 +1,20 @@
 ---
-title: "Untitled"
+title: "AHR - Comparison"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 library(dplyr)
 library(ggplot2)
+library(tidyverse)
+library(kableExtra)
 ```
 
-Baruch: Calculate the percentage difference in spending for each of the states in each of the categories. We do a lot of comparison and contrasting in the report. We don't need to know the actual numerical value or percent from the previous year, but knowing how much the value or percent has changed would be very helpful. 
+
 ```{r}
 AHR_2019 <- rio::import("Copy of Final_AHR_Report .xlsx")
-colnames(AHR_2019)
+
 
 AHR_2019_disbursment <- AHR_2019 %>% rename(state = State,
                     SHA_miles = `SHA Miles`,
@@ -62,7 +64,7 @@ AHR_2020_disbursment <- AHR_2020 %>%
          admin_disbursement_per_lm)
 ```
 
-
+## Changes 2019 - 2020
 ```{r, fig.width=4, fig.height=6}
 disbursment19_20 <- rbind(AHR_2019_disbursment, AHR_2020_disbursment) %>% filter(state != "United States") 
 
@@ -79,9 +81,13 @@ changes19_20 <- disbursment19_20 %>% arrange(state) %>%
   select(8:12) %>% 
   drop_na()
   
+
+kable(changes19_20, "html") %>%
+kable_styling() %>%
+scroll_box(height = "500px", width = "800px")
 ```
 
-```{r, fig.width=4, fig.height=6}
+```{r, fig.width=10, fig.height=12}
 lowerranks <- changes19_20 %>% filter(change_score < 0)
 
 changes19_20 %>% 
@@ -100,7 +106,7 @@ changes19_20 %>%
 ```
 
 
-```{r, fig.width=4, fig.height=6}
+```{r, results = 'asis',  fig.width=10, fig.height=12}
 changes19_20 %>% 
   arrange(desc(change_score)) %>% filter(change_score >5) %>% 
   select(-change_total_disbursement_per_lm) %>% 
@@ -110,12 +116,17 @@ changes19_20 %>%
   ggplot(aes(state, value, group = category)) +
   geom_col(aes(fill = category), position = position_dodge()) +
   scale_fill_brewer() +
+  
   labs(
     x = "",
     y = "",
     title = "Top 5 states with the largest changes in overall ranking",
-    subtitle = "",
-    caption = "Note: ")  +
-  theme_minimal()
+    subtitle = "")  +
+  theme_minimal() +
+  theme(
+    legend.position = c(.95, .95),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right") 
+  
 ```
 
