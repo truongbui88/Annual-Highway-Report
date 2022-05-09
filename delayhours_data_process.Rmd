@@ -40,7 +40,7 @@ umr_2020_hours_delay <- umr_2020 %>%
 
 ```
 
-Distribution of INRIX
+Comparing the distributions of two data sets INRIX
 ```{r}
 congestion_data <- readRDS("congestion_data.RDS") 
   hist(congestion_data$congestion_hours, main = "Histogram of Congestion Hours using INRIX data", col = "lightblue", border = none)

@@ -361,8 +361,9 @@ AHR_data_rank <- AHR_data %>%
     across(capital_disbursement_per_lm:overall_score, min_rank, .names = "{.col}_rank")
   )
 
-AHR_data <- AHR_data %>% 
+AHR_2020 <- AHR_data %>% 
   left_join(AHR_data_rank)
 
-write.csv(AHR_data, "AHR_data_UMRdata.csv")
+saveRDS(AHR_2020, "AHR_2020.RDS")
+write.csv(AHR_2020, "AHR_AHR_2020_UMRdata.csv")
 

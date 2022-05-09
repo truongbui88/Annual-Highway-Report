@@ -57,7 +57,8 @@ congestion_data <- commuter_data_clean %>%
   mutate(congestion_hours = mean(c(hours_lost_in_congestion.x, hours_lost_in_congestion.y, hours_lost_in_congestion), na.rm = T)) %>% 
   ungroup()
 
-  
+saveRDS(congestion_data, "congestion_data.RDS")  
+
 # ggplot(congestion_data, aes(x = auto_commuters_combined, y = congestion_hours)) +
 #   geom_point() +
 #   geom_smooth(method = "lm") +
@@ -95,7 +96,8 @@ congestion_data_summary <- congestion_data_final %>%
   group_by(state) %>% 
   summarise(state_tot_congestion_hours = sum(total_congestion_hours),
             state_tot_commuters = sum(adjusted_auto_commuters_combined)) %>% 
-  ungroup()
+  ungroup() %>% 
+  summarise(all = sum(state_tot_commuters))
   # mutate(state_avg_congestion_hours = state_tot_congestion_hours/state_tot_commuters)
 
 

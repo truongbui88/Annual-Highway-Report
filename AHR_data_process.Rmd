@@ -278,7 +278,7 @@ AHR_data_rank <- AHR_data %>%
 AHR_data <- AHR_data %>% 
   left_join(AHR_data_rank)
 
-write.csv(AHR_data, "AHR_data_2022_tile_impute.csv")
+#write.csv(AHR_data, "AHR_data_2022_tile_impute.csv")
 
 
 ```
