@@ -1,7 +1,7 @@
 library(tidyverse)
 library(readxl)
 library(janitor)
-library(stringr)
+#library(package)
 library(modelr)
 
 inrix <- read_csv("inrix data 2021.csv")
@@ -97,8 +97,8 @@ congestion_data_summary <- congestion_data_final %>%
   summarise(state_tot_congestion_hours = sum(total_congestion_hours),
             state_tot_commuters = sum(adjusted_auto_commuters_combined)) %>% 
   ungroup() %>% 
-  summarise(all = sum(state_tot_commuters))
-  # mutate(state_avg_congestion_hours = state_tot_congestion_hours/state_tot_commuters)
+  #summarise(all = sum(state_tot_commuters)) %>% 
+  mutate(state_avg_congestion_hours = state_tot_congestion_hours/state_tot_commuters)
 
-
-
+#use this for AHR data process
+saveRDS(congestion_data_summary, "congestion_data_summary.RDS")

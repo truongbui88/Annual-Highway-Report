@@ -4,7 +4,7 @@ library(readxl)
 library(modelr)
 
 
-#HM-10: Public road length, miles by ownership
+#HM-10: Public road length 2020, miles by ownership
 HM_10 <- read_excel("hm10.xls", sheet = "A") %>% 
   remove_empty() %>% 
   select(1, 2, 5, 8, 11) %>% 
@@ -20,7 +20,7 @@ HM_10 <- read_excel("hm10.xls", sheet = "A") %>%
   select(state, SHA_miles)
 
 
-#HM-81: State highway agency-owned public roads; rural and urban miles, estimated lane-miles and daily travel
+#HM-81: State highway agency-owned public roads 2020; rural and urban miles, estimated lane-miles and daily travel
 HM_81 <- read_excel("hm81.xls", sheet  = "A") %>% 
   remove_empty() %>% 
   select(1, 17) %>% 
@@ -172,198 +172,101 @@ bridge_poor <- bridge_raw[180:nrow(bridge_raw),] %>%
 bridge_data <- bridge_total %>% 
   left_join(bridge_poor)
 
-#####------------
+
 #Congestion data  - Using INRIX data
-# source("Congestion data process.R")
-# 
-# state_names <- data.frame(state.abb, state.name)     #need this to get state full names for congestion data
-# 
-# congestion_data_summary <- congestion_data_summary %>%
-# #congestion_data_summary_UMR <- congestion_data_summary_UMR %>% 
-#   left_join(state_names, by = c("state" = "state.abb")) %>% 
-#   select(-state) %>% 
-#   rename(state = state.name) %>% 
-#   filter(!is.na(state))
-#   
-# #Bring everything together
-# AHR_data <- list(HM_10, 
-#                  HM_81, 
-#                  SF_4, 
-#                  HM64, 
-#                  FI_20, 
-#                  VM_2, 
-#                  bridge_data, 
-#                  congestion_data_summary) %>% 
-#   reduce(left_join, by = "state")
-# 
-# #Calculate national metrics
-# AHR_data_national <- AHR_data %>%
-#   summarise(across(2:ncol(AHR_data), sum)) %>% 
-#   mutate(state = "United States")
-# 
-# AHR_data <- bind_rows(AHR_data, AHR_data_national)
-# 
-# #Add SHA ratio
-# AHR_data <- AHR_data %>% 
-#   mutate(SHA_ratio = state_controlled_lane_miles / SHA_miles, .after = state_controlled_lane_miles)
-# 
-# 
-# #Calculate key metrics
-# AHR_data <- AHR_data %>% 
-#   mutate(
-#     capital_disbursement_per_lm = capital_disbursement / state_controlled_lane_miles * 1000,
-#     
-#     maintenance_disbursement_per_lm = maintenance_disbursement / state_controlled_lane_miles * 1000,
-#     
-#     admin_disbursement_per_lm = admin_disbursement / state_controlled_lane_miles * 1000,
-#     
-#     total_disbursement_per_lm = total_disbursement / state_controlled_lane_miles * 1000,
-#     
-#     rural_interstate_poor_percent = rural_interstate_above_170 / rural_interstate_total * 100,
-#     
-#     urban_interstate_poor_percent = urban_interstate_above_170 / urban_interstate_total * 100,
-#     
-#     rural_OPA_poor_percent = rural_OPA_above_220 / rural_OPA_total * 100,
-#     
-#     urban_OPA_poor_percent = urban_OPA_above_220 / urban_OPA_total * 100,
-#     
-#     poor_bridges_percent = total_poor_bridges / total_bridges * 100,
-#     
-#     total_fatalities_per_100m_VMT = total_fatalities / total_VMT * 100,
-#     
-#     rural_fatalities_per_100m_VMT = rural_I_OFE_OPA_fatalities / rural_VMT * 100,
-#     
-#     urban_fatalities_per_100m_VMT = urban_I_OFE_OPA_fatalities / urban_VMT * 100,
-#     
-#     state_avg_congestion_hours = state_tot_congestion_hours/state_tot_commuters
-#   )
-# 
-# 
-# #Calculate overall scores
-# AHR_data_composite <- AHR_data %>% 
-#   pivot_longer(cols = capital_disbursement_per_lm:state_avg_congestion_hours, 
-#                names_to = "key_metrics", 
-#                values_to = "value") %>% 
-#   arrange(key_metrics) %>% 
-#   select(state, key_metrics, value) %>% 
-#   group_by(key_metrics) %>% 
-#   mutate(relative_score = value / value[state == "United States"]) %>% 
-#   ungroup() %>% 
-#   group_by(state) %>% 
-#   summarise(overall_score = mean(relative_score, na.rm = T)) %>% 
-#   ungroup()
-#   
-# #Add overall scores to AHR_data
-# AHR_data <- AHR_data %>% 
-#   left_join(AHR_data_composite)
-# 
-# #Rank states according to the calculated metrics
-# AHR_data_rank <- AHR_data %>% 
-#   filter(state != "United States") %>% 
-#   mutate(
-#     across(capital_disbursement_per_lm:overall_score, min_rank, .names = "{.col}_rank")
-#   )
-# 
-# AHR_data <- AHR_data %>% 
-#   left_join(AHR_data_rank)
-# 
-# write.csv(AHR_data, "AHR_data_INRIXdata.csv")
-
-####----------------
-
-congestion_data_summary_UMR <- readRDS("congestion_data_summary_UMR.RDS")
+source("Congestion data process.R")
 
 state_names <- data.frame(state.abb, state.name)     #need this to get state full names for congestion data
 
-  congestion_data_summary_UMR <- congestion_data_summary_UMR %>% 
-  left_join(state_names, by = c("state" = "state.abb")) %>% 
-  select(-state) %>% 
-  rename(state = state.name) %>% 
+congestion_data_summary <- congestion_data_summary %>%
+  left_join(state_names, by = c("state" = "state.abb")) %>%
+  select(-state) %>%
+  rename(state = state.name) %>%
   filter(!is.na(state))
 
 #Bring everything together
-AHR_data <- list(HM_10, 
-                 HM_81, 
-                 SF_4, 
-                 HM64, 
-                 FI_20, 
-                 VM_2, 
-                 bridge_data, 
-                 congestion_data_summary_UMR) %>% 
+AHR_data <- list(HM_10,
+                 HM_81,
+                 SF_4,
+                 HM64,
+                 FI_20,
+                 VM_2,
+                 bridge_data,
+                 congestion_data_summary) %>%
   reduce(left_join, by = "state")
 
 #Calculate national metrics
 AHR_data_national <- AHR_data %>%
-  summarise(across(2:ncol(AHR_data), sum)) %>% 
+  summarise(across(2:ncol(AHR_data), sum)) %>%
   mutate(state = "United States")
 
 AHR_data <- bind_rows(AHR_data, AHR_data_national)
 
 #Add SHA ratio
-AHR_data <- AHR_data %>% 
+AHR_data <- AHR_data %>%
   mutate(SHA_ratio = state_controlled_lane_miles / SHA_miles, .after = state_controlled_lane_miles)
 
 
 #Calculate key metrics
-AHR_data <- AHR_data %>% 
+AHR_data <- AHR_data %>%
   mutate(
     capital_disbursement_per_lm = capital_disbursement / state_controlled_lane_miles * 1000,
-    
+
     maintenance_disbursement_per_lm = maintenance_disbursement / state_controlled_lane_miles * 1000,
-    
+
     admin_disbursement_per_lm = admin_disbursement / state_controlled_lane_miles * 1000,
-    
+
     total_disbursement_per_lm = total_disbursement / state_controlled_lane_miles * 1000,
-    
+
     rural_interstate_poor_percent = rural_interstate_above_170 / rural_interstate_total * 100,
-    
+
     urban_interstate_poor_percent = urban_interstate_above_170 / urban_interstate_total * 100,
-    
+
     rural_OPA_poor_percent = rural_OPA_above_220 / rural_OPA_total * 100,
-    
+
     urban_OPA_poor_percent = urban_OPA_above_220 / urban_OPA_total * 100,
-    
+
     poor_bridges_percent = total_poor_bridges / total_bridges * 100,
-    
+
     total_fatalities_per_100m_VMT = total_fatalities / total_VMT * 100,
-    
+
     rural_fatalities_per_100m_VMT = rural_I_OFE_OPA_fatalities / rural_VMT * 100,
-    
+
     urban_fatalities_per_100m_VMT = urban_I_OFE_OPA_fatalities / urban_VMT * 100,
-    
-    #state_avg_congestion_hours = state_tot_congestion_hours/state_tot_commuters
-    state_avg_delay_hours = state_tot_delay_hours/state_tot_commuters
+
+    state_avg_congestion_hours = state_tot_congestion_hours/state_tot_commuters
   )
 
 
 #Calculate overall scores
-AHR_data_composite <- AHR_data %>% 
-  pivot_longer(cols = capital_disbursement_per_lm:state_avg_delay_hours, 
-               names_to = "key_metrics", 
-               values_to = "value") %>% 
-  arrange(key_metrics) %>% 
-  select(state, key_metrics, value) %>% 
-  group_by(key_metrics) %>% 
-  mutate(relative_score = value / value[state == "United States"]) %>% 
-  ungroup() %>% 
-  group_by(state) %>% 
-  summarise(overall_score = mean(relative_score, na.rm = T)) %>% 
+AHR_data_composite <- AHR_data %>%
+  pivot_longer(cols = capital_disbursement_per_lm:state_avg_congestion_hours,
+               names_to = "key_metrics",
+               values_to = "value") %>%
+  arrange(key_metrics) %>%
+  select(state, key_metrics, value) %>%
+  group_by(key_metrics) %>%
+  mutate(relative_score = value / value[state == "United States"]) %>%
+  ungroup() %>%
+  group_by(state) %>%
+  summarise(overall_score = mean(relative_score, na.rm = T)) %>%
   ungroup()
 
 #Add overall scores to AHR_data
-AHR_data <- AHR_data %>% 
+AHR_data <- AHR_data %>%
   left_join(AHR_data_composite)
 
 #Rank states according to the calculated metrics
-AHR_data_rank <- AHR_data %>% 
-  filter(state != "United States") %>% 
+AHR_data_rank <- AHR_data %>%
+  filter(state != "United States") %>%
   mutate(
     across(capital_disbursement_per_lm:overall_score, min_rank, .names = "{.col}_rank")
   )
 
-AHR_2020 <- AHR_data %>% 
+AHR_data <- AHR_data %>%
   left_join(AHR_data_rank)
 
-saveRDS(AHR_2020, "AHR_2020.RDS")
-write.csv(AHR_2020, "AHR_AHR_2020_UMRdata.csv")
+write.csv(AHR_data, "AHR_data_INRIXdata.csv")
+saveRDS(AHR_data, "AHR_data_INRIXdata.RDS")
+
 
