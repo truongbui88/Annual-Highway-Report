@@ -208,13 +208,13 @@ AHR_data <- AHR_data %>%
 #Calculate key metrics
 AHR_data <- AHR_data %>% 
   mutate(
-    capital_disbursement_per_lm = capital_disbursement / state_controlled_lane_miles * 1000,
+    capital_disbursement_per_vmt = capital_disbursement / total_VMT * 1000,
     
-    maintenance_disbursement_per_lm = maintenance_disbursement / state_controlled_lane_miles * 1000,
+    maintenance_disbursement_per_vmt = maintenance_disbursement / total_VMT * 1000,
     
-    admin_disbursement_per_lm = admin_disbursement / state_controlled_lane_miles * 1000,
+    admin_disbursement_per_vmt = admin_disbursement / total_VMT * 1000,
     
-    total_disbursement_per_lm = total_disbursement / state_controlled_lane_miles * 1000,
+    # total_disbursement_per_lm = total_disbursement / state_controlled_lane_miles * 1000,
     
     rural_interstate_poor_percent = rural_interstate_above_170 / rural_interstate_total * 100,
     
@@ -226,7 +226,7 @@ AHR_data <- AHR_data %>%
     
     poor_bridges_percent = total_poor_bridges / total_bridges * 100,
     
-    total_fatalities_per_100m_VMT = total_fatalities / total_VMT * 100,
+    # total_fatalities_per_100m_VMT = total_fatalities / total_VMT * 100,
     
     rural_fatalities_per_100m_VMT = rural_I_OFE_OPA_fatalities / rural_VMT * 100,
     
@@ -238,7 +238,7 @@ AHR_data <- AHR_data %>%
 
 #Calculate overall scores
 AHR_data_composite <- AHR_data %>% 
-  pivot_longer(cols = capital_disbursement_per_lm:state_avg_congestion_hours, 
+  pivot_longer(cols = capital_disbursement_per_vmt:state_avg_congestion_hours, 
                names_to = "key_metrics", 
                values_to = "value") %>% 
   arrange(key_metrics) %>% 
@@ -258,14 +258,15 @@ AHR_data <- AHR_data %>%
 AHR_data_rank <- AHR_data %>% 
   filter(state != "United States") %>% 
   mutate(
-    across(capital_disbursement_per_lm:overall_score, min_rank, .names = "{.col}_rank")
+    across(capital_disbursement_per_vmt:overall_score, min_rank, .names = "{.col}_rank")
   )
 
 AHR_data <- AHR_data %>% 
   left_join(AHR_data_rank)
 
-write.csv(AHR_data, "AHR_data.csv")
+write.csv(AHR_data, "AHR_data2.csv")
 
+#Visualize AHR raw scores
 
 
 
