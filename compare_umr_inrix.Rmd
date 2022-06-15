@@ -1,90 +1,104 @@
 ---
-title: "Untitled"
+title: "UMR delay hours vs. INRIX congestion hours"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-library(ggplot2)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(stringr)
+library(modelr)
 library(dplyr)
+library(stringr)
+library(psych)
+options(scipen=999)
 ```
 
+# UMR 2020 vs INRIX 2021 - Raw data
+UMR report has 2020 data of Annual Hours of Delay per auto commuter. This data looks quite similar to INRIX data in terms of distribution. An advantage of UMR is its fullness, while INRIX has 50% missing data. Furthermore, the following are provided (while not available in INRIX): total auto commuters, total hours of delay, hours of delay per auto commuter. 
 
+```{r, echo = FALSE}
+#sent by Baruch
+#also available here: https://mobility.tamu.edu/umr/data-and-trends/urban-areas-in-the-study/#other-urban-areas
+#define: The Delay per Auto Commuter, Cost per Auto Commuter, and Travel Time Index are estimates of the congestion effects on individuals. https://mobility.tamu.edu/umr/media-information/answers-to-many-of-your-questions/
+
+umr_2020 <- rio::import("data/Copy of complete-data-2021-umr-by-tti.xlsx") %>% filter(Year == "2020") %>% 
+  rename(
+    #auto_commuters = Auto, # original column:  Auto Commuter (000)
+    #total_delay_person_hours = `Annual Hours of Delay`, # original column: " Total Delay (Person-Hours) (000) " 
+    hours_delay_perAuto_commuter = `...24`, # original column: per Auto Commuter
+    #population = `Population...6`, 
+    city = `Urban Area`, 
+    state = Primary) %>% 
+  
+  select(city, state, hours_delay_perAuto_commuter) %>% 
+  mutate(hours_delay_perAuto_commuter = as.numeric(hours_delay_perAuto_commuter)) 
+
+umr_2020 %>% arrange((city)) %>% filter(str_detect(city, "Atlanta"))
+```
+
+```{r, include=FALSE}
+inrix <- read_csv("data/inrix data 2021.csv")
+inrix %>% arrange(city) %>% filter(str_detect(city, "Atlanta"))
+
+
+```
+
+```{r, fig.width=7}
+#check correlation at cities level 
+umr_inrix_cities <- umr_2020 %>% mutate(city = str_sub(city,1, nchar(city)-3)) %>% 
+  left_join(inrix) %>% arrange(hours_delay_perAuto_commuter) %>% filter(!is.na(hours_lost_in_congestion)) %>% 
+  mutate(hours_diff = hours_delay_perAuto_commuter - hours_lost_in_congestion) %>% 
+  arrange(desc(hours_diff))
+
+umr_inrix_cities %>% 
+slice(1:50) %>% 
+
+mutate(city = fct_reorder(city, desc(hours_delay_perAuto_commuter))) %>%
+  ggplot() +
+  geom_point(aes(x=city, y=hours_delay_perAuto_commuter),colour='blue', alpha=.6) + 
+  geom_point(aes(x=city, y=hours_lost_in_congestion),colour='orange', alpha=.6) + 
+  coord_flip() +
+  ggtitle('City where hours_delay_perAuto_commuter is larger') + 
+  xlab('') + 
+  ylab('Value - Orange: hours_lost_in_congestion') + 
+  theme_bw() + 
+  theme(
+    plot.title = element_text(size=20),
+    axis.title.x = element_text(size=15),
+    axis.title.y = element_text(size=15)
+  )
+
+
+```
 ```{r}
-# TB's result: 
-AHR_data_TB <- readRDS("AHR_data_INRIXdata.RDS")
-congestion_data_summary_TB <- readRDS("congestion_data_summary.RDS")
-# this has 52 obs because of these 2: 
-setdiff(congestion_data_summary_TB$state, state.abb)
-```
-
-Comparing two data sets: Distributions of INRIX
-```{r}
-congestion_data <- readRDS("congestion_data.RDS") 
-  hist(congestion_data$congestion_hours, main = "Histogram of Congestion Hours using INRIX data", col = "lightblue", border = none)
-  describe(congestion_data$congestion_hours) %>% select(n, mean, sd, median, min, max)
-```
-
-Distribution of UMR
-```{r}
-  hist(umr_2020_hours_delay$hours_delay_perAuto_commuter, main = "Histogram of Delay Hours using UMR data", col = "darkgreen", border = none)
-  describe(umr_2020_hours_delay$hours_delay_perAuto_commuter) %>% select(n, mean, sd, median, min, max)
+# check some areas close to each other to see umr or inrix data capture better. 
+umr_inrix_cities %>% filter(str_detect(city, "Green|Spartan"))
+# Note: Baruch: It makes sense that Spartanburg SC & Greenville	SC have the same hours
 ```
 
 
-Delay hours in UMR data has no missing values, less scatter (smaller standard deviation), less extreme values (smaller max value)
+```{r, fig.width=7}
+umr_inrix_cities %>% 
+slice(100:148) %>% 
 
-```{r}
-umr_inrix <- umr_2020_hours_delay %>% arrange(city) %>% 
-  mutate(city = str_sub(city, end = -4)) %>% 
-  left_join(inrix) %>% 
-  filter(!is.na(hours_delay_perAuto_commuter)) 
-
-umr_inrix %>% 
-  ggplot(aes(auto_commuters, hours_delay_perAuto_commuter)) +
-  geom_point(color = "gray") +
-  geom_point(aes(auto_commuters, hours_lost_in_congestion), color = "blue") + 
-  labs(title = "INRIX data (blue) vs. UMR data (gray)",
-       caption = "Three large cities: New York-Newark NY-NJ, Los Angeles-Long Beach-Anaheim, Chicago IL") +
-  theme_minimal()
-
-
+mutate(city = fct_reorder(city, desc(hours_delay_perAuto_commuter))) %>%
+  ggplot() +
+  geom_point(aes(x=city, y=hours_delay_perAuto_commuter),colour='blue', alpha=.6) + 
+  geom_point(aes(x=city, y=hours_lost_in_congestion),colour='orange', alpha=.6) + 
+  coord_flip() +
+  ggtitle('Cities where hours_lost_in_congestion is larger than hours_delay_perAuto_commuter ') + 
+  xlab('') + 
+  ylab('Value - Orange: hours_lost_in_congestion') + 
+  theme_bw() + 
+  theme(
+    plot.title = element_text(size=20),
+    axis.title.x = element_text(size=15),
+    axis.title.y = element_text(size=15)
+  )
 ```
 
-```{r}
 
-umr_inrix %>% arrange(desc(auto_commuters)) %>% slice(-(1:3)) %>% # take out 3 biggest cities with extreme values
-  ggplot(aes(auto_commuters, hours_delay_perAuto_commuter)) +
-  geom_point(color = "gray") +
-  geom_point(aes(auto_commuters, hours_lost_in_congestion), color = "blue") + 
-  labs(title = "INRIX data (blue) vs. UMR data (gray), excluding 3 largest cities") +
-  theme_minimal()
-
-```
-
-```{r}
-AHR_2020_umr <- rio::import("AHR_AHR_2020_UMRdata.csv")
-AHR_2020_inrix <-rio::import("AHR_data_INRIXdata.csv")
-
-hist(AHR_2020_umr$state_avg_delay_hours_rank)
-hist(AHR_2020_inrix$state_avg_congestion_hours_rank)
-
-tibble(AHR_2020_umr$state, AHR_2020_umr$state_avg_delay_hours_rank)
-tibble(AHR_2020_inrix$state, AHR_2020_inrix$state_avg_congestion_hours_rank)
-
-AHR_2020_umr %>% 
-  select(state, state_avg_delay_hours_rank, state_avg_delay_hours) -> a
-
-
-AHR_2020_inrix %>% select(state, state_avg_congestion_hours_rank, state_avg_congestion_hours) -> b
-
-a %>% left_join(b) %>% 
-  mutate(changes = state_avg_delay_hours_rank - state_avg_congestion_hours_rank, 
-         changes_hours = (state_avg_delay_hours - state_avg_congestion_hours)/state_avg_congestion_hours
-         
-         
-         ) %>% 
-  arrange(desc(changes_hours))
-
-```
 
