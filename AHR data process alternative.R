@@ -4,6 +4,13 @@ library(readxl)
 library(modelr)
 
 
+#Cost of living index for later adjustment to spending numbers
+coli <- read.csv("coli_meric.csv") %>% 
+  clean_names() %>% 
+  select(state, coli_index) %>% 
+  mutate(coli_index = coli_index/100)
+
+
 #HM-10: Public road length, miles by ownership
 HM_10 <- read_excel("hm10.xls", sheet = "A") %>% 
   remove_empty() %>% 
@@ -48,6 +55,11 @@ SF_4 <- read_excel("sf4.xlsx", sheet = "A") %>%
          across(capital_disbursement:total_disbursement, as.numeric)) %>% 
   filter(state %in% state.name)
 
+#Apply cost of living adjustment to spending numbers
+SF_4_adjusted <- SF_4 %>% 
+  left_join(coli) %>% 
+  mutate(across(2:5, ~ .x/coli_index)) %>% 
+  select(-coli_index)
 
 #HM-64: Miles by measured pavement roughness
 HM64_rural_interstate <- read_excel("hm64.xls", sheet = "A") %>% 
@@ -185,7 +197,7 @@ congestion_data_summary <- congestion_data_summary %>%
 #Bring everything together
 AHR_data <- list(HM_10, 
                  HM_81, 
-                 SF_4, 
+                 SF_4_adjusted, 
                  HM64, 
                  FI_20, 
                  VM_2, 
