@@ -1,0 +1,215 @@
+---
+title: "AHR - Some Viz"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(kableExtra)
+library(janitor)
+```
+
+The Annual Highway Report’s goal is to provide an accurate, current evaluation of state highway systems. In order to meet that goal, we made two changes to better measure disbursements. The changes are described in this section and the report’s technical and quantitative metrics are detailed in the appendix.
+
+# How using VMT instead of Per lane miles changes the overall ranking
+
+```{r}
+AHR_data_umr_coli <- read_csv("AHR_data_umr_coli.csv") 
+
+#change due to using VTM instead of per lane miles
+AHR_data_umr_coli %>% select(state, overall_score_perlm_NOcoli_rank, overall_score_NOcoli_rank) %>% 
+  mutate(change_due_to_vmt = overall_score_NOcoli_rank - overall_score_perlm_NOcoli_rank) %>% 
+  filter(change_due_to_vmt != 0) %>% arrange(desc(change_due_to_vmt)) %>% 
+
+kable(caption = "**Change due to using VTM instead of per lane mile\n - Not adjusted for cost of living**", row.names = FALSE) %>% 
+  kable_paper("hover", full_width = FALSE) %>% 
+  row_spec(row = 0, background =  "#45818e", color = "white", bold = TRUE) %>% 
+  scroll_box(height = "500px", width = "900px") 
+
+```
+
+# How cost of living changes the overall ranking
+```{r}
+# Change due to using VTM cost of living, 
+AHR_data_umr_coli %>% select(state, overall_score_NOcoli_rank, overall_score_WITHcoli_rank, coli_index) %>% 
+  mutate(change_due_to_coli = overall_score_NOcoli_rank - overall_score_WITHcoli_rank) %>% 
+  arrange(desc(change_due_to_coli)) %>% 
+
+
+kable(caption = "**Change due to using VTM & adjusted for cost of living**", row.names = FALSE) %>% 
+  kable_paper("hover", full_width = FALSE) %>% 
+  row_spec(row = 0, background =  "darkgreen", color = "white", bold = TRUE) %>% 
+  scroll_box(height = "500px", width = "900px") 
+```
+
+# Compare AHR 2019 - 2020
+
+The overall rankings were different from the previous version of the Annual Highway Report. 
+Change score = score 2019 - score 2020
+```{r}
+# sent by Baruch
+AHR_2019 <- rio::import("data/Copy of Final_AHR_Report .xlsx") %>% 
+  clean_names() %>% 
+  select(state, year, overall_rank) %>% filter(state != "United States")
+
+AHR_2020 <- read_csv("AHR_data_umr_coli.csv") %>% 
+  mutate(year = 2020) %>% 
+  select(state, year, overall_score_WITHcoli_rank) %>% filter(state != "United States") %>% 
+  rename(overall_rank = overall_score_WITHcoli_rank)
+
+changes19_20 <- rbind(AHR_2019, AHR_2020) %>% 
+            arrange(state) %>% 
+            group_by(state) %>%
+
+            # calculate overall score changes 2019 - 2020
+            mutate(change_score = overall_rank - lead(overall_rank, order_by = year)) 
+
+kable(changes19_20,
+      caption = "**Changes in overall ranking (ranking 2021 adjusted for cost of living). Change score = score 2019 - score 2020**",
+      "html") %>%
+  kable_styling() %>% 
+  row_spec(row = 0, background =  "#45818e", color = "white", bold = TRUE) %>% 
+scroll_box(height = "500px", width = "800px") 
+```
+
+# Changes in over ranking in all states
+```{r, fig.width=8, fig.height=10}
+lowerranks <- changes19_20 %>% filter(change_score < 0)
+
+changes19_20 %>%
+  filter(change_score != 0) %>%
+  ggplot(aes(fct_reorder(state, change_score), change_score)) +
+  geom_col(fill="darkgreen", alpha=.8, width=.5)+
+  geom_col(data = lowerranks, fill="lightblue", alpha=.8, width=.5)+
+  coord_flip() +
+  labs(
+    x = "",
+    y= "Score",
+    title = "Changes in overall ranking, Score change = score 2019 - score 2020",
+    subtitle = "Positive value means improvement (score 2020 < score 2019)",
+    caption = "")  +
+  theme_minimal()
+```
+
+
+# States have change_score > 5
+
+```{r, results = 'asis'}
+top10_declined <- changes19_20 %>% drop_na() %>%
+  select(state, change_score) %>% 
+  arrange(desc(change_score)) %>% filter(change_score > 5)
+  
+top10_improved <- changes19_20 %>% drop_na() %>%
+  select(state, change_score) %>% 
+  arrange(change_score) %>% filter(change_score <= -5)
+  
+top10_declined %>% 
+ggplot(aes(fct_reorder(state, change_score), change_score)) +
+  geom_segment(aes(x = state, xend = state, y = 0, yend = change_score), color = "grey") +
+  geom_point(aes(state, change_score), color = "#6aa84f", size = 7) +
+  geom_text(aes(y = change_score, label = change_score), color = "white", size = 3) +
+  theme_minimal() +
+  labs(
+    x = "",
+    y = "",
+    title = "States have change_score > 5",
+    subtitle = "")  +
+  theme(axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5)) 
+  
+  
+```
+
+
+# States have change_score < or = -5
+
+```{r}
+top10_improved %>% 
+ggplot(aes(fct_reorder(state, change_score), change_score)) +
+  geom_segment(aes(x = state, xend = state, y = 0, yend = change_score), color = "grey") +
+  geom_point(aes(state, change_score), color = "orange", size = 7) +
+  geom_text(aes(y = change_score, label = change_score), color = "white", size = 3) +
+  theme_minimal() +
+  labs(
+    x = "",
+    y = "",
+    title = "States have change_score < or = -5",
+    subtitle = "")  +
+  theme(axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5)) 
+  
+```
+
+
+# Mapping
+
+```{r}
+library(usmap)
+
+plot_usmap(data = AHR_data_umr_coli, values = "overall_score_WITHcoli", color = "gray") +
+  scale_fill_continuous(
+    low = "white", 
+   high = "red", 
+    name = "Overall ranking (adjusted for cost of living)"
+  ) +
+  theme(legend.position = "right")
+```
+
+
+# Better mapping
+
+```{r}
+library(broom)
+library(geojsonio)
+library(RColorBrewer)
+#library(rgdal)
+library(tidyverse)
+library(viridis)
+library(rgeos)
+
+spdf <- geojson_read("data/us_states_hexgrid.geojson",  what = "sp")
+spdf@data = spdf@data %>% mutate(google_name = gsub(" \\(United States\\)", "", google_name))
+
+data <- AHR_data_umr_coli %>% select(state, overall_score_WITHcoli_rank)
+
+spdf_fortified <- tidy(spdf, region = "google_name") %>% 
+  left_join(., data, by = c("id" = "state"))
+
+# binning
+spdf_fortified$bin <- cut(spdf_fortified$overall_score_WITHcoli_rank, 
+                           breaks=5, include.lowest = TRUE, labels=c("0-10", "10-20", "20-30", "30-40", "40-50"))
+
+# Pcolor scale coming from the viridis color palette
+my_palette <- rev(magma(12))[c(-1,-8)]
+ 
+
+# Calculate the centroid of each hexagon to add the label:
+centers <- cbind.data.frame(data.frame(gCentroid(spdf, byid=TRUE), id=spdf@data$iso3166_2))
+
+ggplot() +
+  geom_polygon(data = spdf_fortified, aes(fill = bin, x = long, y = lat, group = group) , size=0, alpha=0.9) +
+  geom_text(data=centers, aes(x=x, y=y, label=id), color="white", size=3, alpha=0.6) +
+  theme_void() +
+  scale_fill_manual( 
+    values=my_palette, 
+    name="Overall ranking 2020", 
+    guide = guide_legend( keyheight = unit(3, units = "mm"), keywidth=unit(12, units = "mm"), label.position = "bottom", title.position = 'top', nrow=1) 
+  ) +
+  ggtitle( "" ) +
+  theme(
+    legend.position = c(0.5, 1.1),
+    text = element_text(color = "#22211d"),
+    plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+    panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+    legend.background = element_rect(fill = "#f5f5f2", color = NA),
+    plot.title = element_text(size= 50, hjust=0.5, color = "#a61c00", margin = margin(b = -0.1, t = 0.4, l = 2, unit = "cm")),
+  )
+
+```
+
+

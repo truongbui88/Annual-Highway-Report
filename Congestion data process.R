@@ -1,12 +1,14 @@
 library(tidyverse)
 library(readxl)
 library(janitor)
-library(stringr)
+#library(package)
 library(modelr)
 
-inrix <- read_csv("inrix data 2021.csv")
-commuter_data <- read_csv("ACS Commuter Data 2019.csv")
-vehicle_miles_data <- read_excel("HM-74 Daily Vehicle Miles Travelled.xlsx", sheet = "Sheet1")
+inrix <- read_csv("data/inrix data 2021.csv")
+commuter_data <- read_csv("data/ACS Commuter Data 2019.csv")
+
+#https://www.fhwa.dot.gov/policyinformation/statistics/2020/hm74.cfm
+vehicle_miles_data <- read_excel("data/HM-74 Daily Vehicle Miles Travelled.xlsx", sheet = "Sheet1")
 
 #Clean data
 commuter_data_clean <- commuter_data %>% 
@@ -44,7 +46,10 @@ vehicle_miles_data_clean <- vehicle_miles_data %>%
          total_dmvt = interstate_total + ofe_total + opa_total + ma_total   #exclude "unreported" dvm based on the documentation and past results. Can change this later if we decide to include this number. 
          ) %>% 
   group_by(area) %>% 
-  mutate(dmvt_pct = total_dmvt/sum(total_dmvt)) %>%
+  mutate(dmvt_pct = total_dmvt/sum(total_dmvt)) %>% # take percentage of vmt in each state
+  # check areas that run across multiple states
+  #filter(dmvt_pct !=1 ) %>% filter(area == "Allentown, PA--NJ") # 
+  
   ungroup() %>% 
   select(area, first_city,  first_state, state, dmvt_pct)
 
@@ -57,7 +62,8 @@ congestion_data <- commuter_data_clean %>%
   mutate(congestion_hours = mean(c(hours_lost_in_congestion.x, hours_lost_in_congestion.y, hours_lost_in_congestion), na.rm = T)) %>% 
   ungroup()
 
-  
+saveRDS(congestion_data, "congestion_data.RDS")  
+
 # ggplot(congestion_data, aes(x = auto_commuters_combined, y = congestion_hours)) +
 #   geom_point() +
 #   geom_smooth(method = "lm") +
@@ -87,16 +93,17 @@ congestion_data_final <- bind_rows(congestion_data_inrix, congestion_data_non_in
   left_join(vehicle_miles_data_clean, by = c("first_city", "first_state")) %>%
   mutate(dmvt_pct = ifelse(is.na(dmvt_pct), 1, dmvt_pct),
          state = ifelse(is.na(state), first_state, state),
-         total_congestion_hours = congestion_hours * auto_commuters_combined * dmvt_pct,
-         adjusted_auto_commuters_combined = auto_commuters_combined * dmvt_pct)
+         total_congestion_hours = congestion_hours * auto_commuters_combined * dmvt_pct, 
+         adjusted_auto_commuters_combined = auto_commuters_combined * dmvt_pct)  #auto commuter in each area * percent of commuter travel in each state
 
 #Calculate congestion hours per commuter by state
 congestion_data_summary <- congestion_data_final %>% 
   group_by(state) %>% 
   summarise(state_tot_congestion_hours = sum(total_congestion_hours),
             state_tot_commuters = sum(adjusted_auto_commuters_combined)) %>% 
-  ungroup()
-  # mutate(state_avg_congestion_hours = state_tot_congestion_hours/state_tot_commuters)
+  ungroup() %>% 
+  #summarise(all = sum(state_tot_commuters)) %>% 
+  mutate(state_avg_congestion_hours = state_tot_congestion_hours/state_tot_commuters)
 
-
-
+#use this for AHR data process
+saveRDS(congestion_data_summary, "congestion_data_summary.RDS")

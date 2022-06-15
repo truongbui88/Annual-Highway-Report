@@ -1,0 +1,146 @@
+---
+title: "ranking_umr_VMT"
+output: html_document
+date: '2022-06-11'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(pacman)
+p_load(dplyr, stringr, readxl, janitor, tidyverse)
+```
+
+# Hours of delay by urban area- UMR
+```{r, echo = FALSE}
+# UMR 2020 vs INRIX 2021 - Raw data
+#UMR report has 2020 data of Annual Hours of Delay per auto commuter. An advantage of UMR is its fullness, while INRIX has 50% missing data. 
+#sent by Baruch, also available here: https://mobility.tamu.edu/umr/data-and-trends/urban-areas-in-the-study/#other-urban-areas
+#define: The Delay per Auto Commuter, Cost per Auto Commuter, and Travel Time Index are estimates of the congestion effects on individuals. https://mobility.tamu.edu/umr/media-information/answers-to-many-of-your-questions/
+
+umr_2020 <- rio::import("data/Copy of complete-data-2021-umr-by-tti.xlsx") %>% filter(Year == "2020") %>% 
+  rename(
+    auto_commuters = Auto, # original column:  Auto Commuter (000)
+    hours_delay_perAuto_commuter = `...24`, # original column: per Auto Commuter
+    first_state = Primary, 
+    urban_area = `Urban Area`,
+    ) %>% 
+  mutate(hours_delay_perAuto_commuter = as.numeric(hours_delay_perAuto_commuter),
+         auto_commuters = as.numeric(auto_commuters)*1000) %>% 
+  select(urban_area, first_state, hours_delay_perAuto_commuter, auto_commuters) %>% 
+
+# clean city name 
+  mutate(urban_area = str_remove(urban_area, " City"),
+    city = str_sub(urban_area, 1, nchar(urban_area)-3),
+    
+    city = str_remove(city, "[A-Z]{2}$"), #remove the last 2 capital letters
+    city = str_remove(city, "-$"), # remove the - that used to indicate multiple states
+    city = str_remove(city, "[A-Z]{2}$"), # remove any last state abb
+    
+# split first-second-third city ; first-second state--> each will have proportion of daily vehicle mile traveled corresponding to each state. 
+    first_city = str_split(city, "-", simplify = T)[,1],
+    second_city = str_split(city, "-", simplify = T)[,2],
+    third_city = str_split(city, "-", simplify = T)[,3]) %>% 
+  select(urban_area, city, first_city, second_city, third_city, first_state, auto_commuters, hours_delay_perAuto_commuter)
+
+# the whole UMR data also has 2020 commuter data, but seems to be quite different from ACS data. 
+
+# for now: only get delay hours. May explore later whether should use this commuter data instead of ACS 2019. 
+umr_delay_hr <- umr_2020 %>% 
+  select(first_city, first_state, hours_delay_perAuto_commuter) %>% 
+  rename(city = first_city, 
+         state = first_state) %>% 
+  arrange(desc(hours_delay_perAuto_commuter)) %>% 
+  mutate(city = str_trim(city))
+
+```
+
+# Number of commuter per city
+```{r}
+commuter_data <- read_csv("data/ACS Commuter Data 2019.csv")
+
+commuter_data_clean <- commuter_data %>% 
+  clean_names() %>% 
+  select(name, s0802_c02_001e, s0802_c03_001e) %>% 
+  rename(area = name,
+         auto_commuters_alone = s0802_c02_001e, #Estimate!!Car, truck, or van -- drove alone!!Workers 16 years and over
+         auto_commuters_carpooled = s0802_c03_001e) %>% #Estimate!!Car, truck, or van -- carpooled!!Workers 16 years and over
+  
+  mutate(auto_commuters_alone = as.numeric(auto_commuters_alone),
+         auto_commuters_carpooled = as.numeric(auto_commuters_carpooled),
+         auto_commuters_combined = auto_commuters_alone + auto_commuters_carpooled/2.2) %>%    #2.2 is the average carpool occupancy. 
+  filter(!is.na(auto_commuters_alone)) %>% 
+  
+  mutate(city = str_replace(area, ",.*", ""),       #remove state name and area label (metro vs micro)
+         city = str_replace(city, " City", ""),     #remove "City" in city names 
+         first_city = str_split(city, "-", simplify = T)[,1],
+         # city = str_replace(city, "-.*", ""),   #retain the first city name only
+         second_city = str_split(city, "-", simplify = T)[,2],
+         third_city = str_split(city, "-", simplify = T)[,3],
+         
+         first_state = str_extract(area, ", .."),   
+         first_state = str_replace(first_state, ", ", ""),  
+         urban = ifelse(grepl("Metro Area", area), "Metro Area", "Micro Area")
+         ) %>%
+  filter(urban == "Metro Area") %>%   #retain metro areas only. 
+  relocate(area, city, first_city, second_city, third_city, first_state, urban) 
+
+# NOTE: inferred data (not given in dataset): auto_commuters_combined
+```
+# Daily Vehicle Miles Traveled 
+```{r}
+# The above data only show total commuter and delay hours for metro area, NOT per state
+# Daily Vehicle Miles Traveled --> Find out the percentage of mile traveled can be attributed to each state. 
+#https://www.fhwa.dot.gov/policyinformation/statistics/2020/hm74.cfm
+vehicle_miles_data <- read_excel("data/HM-74 Daily Vehicle Miles Travelled.xlsx", sheet = "Sheet1")
+
+vehicle_miles_data_clean <- vehicle_miles_data %>% 
+  clean_names() %>% 
+  mutate(first_city = str_replace(area, ",.*",""),
+         first_city = str_replace(first_city, "-.*",""),
+         first_city = str_replace(first_city, " City", ""),
+         first_state = str_extract(area, ", .."), # get 2 letters after ,
+         first_state = str_replace(first_state, ", ", ""),
+         total_dmvt = interstate_total + ofe_total + opa_total + ma_total   #exclude "unreported" dvm based on the documentation and past results. Can change this later if we decide to include this number. 
+         ) %>% 
+  group_by(area) %>%  # some areas run cross multiple states --> must have different total daily mile traveled attributed to 1st state for 2nd state differently 
+  mutate(test_tot = sum(total_dmvt)) %>% 
+  mutate(dmvt_pct = total_dmvt/sum(total_dmvt)) %>%  # take percentage of dvmt in each state
+  
+  # check areas that run across multiple states
+  #filter(dmvt_pct !=1 ) --> # 137 area 
+  
+  ungroup() %>% 
+  select(area, first_city,first_state, state, dmvt_pct)
+
+```
+
+# Final result: Delay hours by state
+```{r}
+delay_data_final <- commuter_data_clean %>% 
+  left_join(umr_delay_hr, by = c("first_state" = "state", "first_city" = "city")) %>% 
+  left_join(umr_delay_hr, by = c("first_state" = "state", "second_city" = "city")) %>% 
+  left_join(umr_delay_hr, by = c("first_state" = "state", "third_city" = "city")) %>% 
+  filter(!is.na(hours_delay_perAuto_commuter.x)) %>% 
+  select(area, city, first_city, second_city, third_city, first_state, auto_commuters_combined, hours_delay_perAuto_commuter.x) %>% 
+# join & apportion by state
+  left_join(vehicle_miles_data_clean, by = c("first_city", "first_state")) %>% 
+  mutate(dmvt_pct = ifelse(is.na(dmvt_pct), 1, dmvt_pct),
+         state = ifelse(is.na(state), first_state, state),
+         total_delay_hours = hours_delay_perAuto_commuter.x * auto_commuters_combined * dmvt_pct, 
+         adjusted_auto_commuters_combined = auto_commuters_combined * dmvt_pct)  #auto commuter in each area * percent of commuter travel in each state
+  
+
+delay_data_summary <- delay_data_final %>% 
+  group_by(state) %>% 
+  summarise(state_tot_delay_hours = sum(total_delay_hours),
+            state_tot_commuters = sum(adjusted_auto_commuters_combined)) %>% 
+  ungroup() %>% 
+  #summarise(all = sum(state_tot_commuters)) %>% 
+  mutate(state_avg_delay_hours = state_tot_delay_hours/state_tot_commuters)
+
+#use this for AHR data process
+saveRDS(delay_data_summary, "delay_data_summary.RDS")
+```
+
+
+

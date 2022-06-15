@@ -1,0 +1,104 @@
+---
+title: "UMR delay hours vs. INRIX congestion hours"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(stringr)
+library(modelr)
+library(dplyr)
+library(stringr)
+library(psych)
+options(scipen=999)
+```
+
+# UMR 2020 vs INRIX 2021 - Raw data
+UMR report has 2020 data of Annual Hours of Delay per auto commuter. This data looks quite similar to INRIX data in terms of distribution. An advantage of UMR is its fullness, while INRIX has 50% missing data. Furthermore, the following are provided (while not available in INRIX): total auto commuters, total hours of delay, hours of delay per auto commuter. 
+
+```{r, echo = FALSE}
+#sent by Baruch
+#also available here: https://mobility.tamu.edu/umr/data-and-trends/urban-areas-in-the-study/#other-urban-areas
+#define: The Delay per Auto Commuter, Cost per Auto Commuter, and Travel Time Index are estimates of the congestion effects on individuals. https://mobility.tamu.edu/umr/media-information/answers-to-many-of-your-questions/
+
+umr_2020 <- rio::import("data/Copy of complete-data-2021-umr-by-tti.xlsx") %>% filter(Year == "2020") %>% 
+  rename(
+    #auto_commuters = Auto, # original column:  Auto Commuter (000)
+    #total_delay_person_hours = `Annual Hours of Delay`, # original column: " Total Delay (Person-Hours) (000) " 
+    hours_delay_perAuto_commuter = `...24`, # original column: per Auto Commuter
+    #population = `Population...6`, 
+    city = `Urban Area`, 
+    state = Primary) %>% 
+  
+  select(city, state, hours_delay_perAuto_commuter) %>% 
+  mutate(hours_delay_perAuto_commuter = as.numeric(hours_delay_perAuto_commuter)) 
+
+umr_2020 %>% arrange((city)) %>% filter(str_detect(city, "Atlanta"))
+```
+
+```{r, include=FALSE}
+inrix <- read_csv("data/inrix data 2021.csv")
+inrix %>% arrange(city) %>% filter(str_detect(city, "Atlanta"))
+
+
+```
+
+```{r, fig.width=7}
+#check correlation at cities level 
+umr_inrix_cities <- umr_2020 %>% mutate(city = str_sub(city,1, nchar(city)-3)) %>% 
+  left_join(inrix) %>% arrange(hours_delay_perAuto_commuter) %>% filter(!is.na(hours_lost_in_congestion)) %>% 
+  mutate(hours_diff = hours_delay_perAuto_commuter - hours_lost_in_congestion) %>% 
+  arrange(desc(hours_diff))
+
+umr_inrix_cities %>% 
+slice(1:50) %>% 
+
+mutate(city = fct_reorder(city, desc(hours_delay_perAuto_commuter))) %>%
+  ggplot() +
+  geom_point(aes(x=city, y=hours_delay_perAuto_commuter),colour='blue', alpha=.6) + 
+  geom_point(aes(x=city, y=hours_lost_in_congestion),colour='orange', alpha=.6) + 
+  coord_flip() +
+  ggtitle('City where hours_delay_perAuto_commuter is larger') + 
+  xlab('') + 
+  ylab('Value - Orange: hours_lost_in_congestion') + 
+  theme_bw() + 
+  theme(
+    plot.title = element_text(size=20),
+    axis.title.x = element_text(size=15),
+    axis.title.y = element_text(size=15)
+  )
+
+
+```
+```{r}
+# check some areas close to each other to see umr or inrix data capture better. 
+umr_inrix_cities %>% filter(str_detect(city, "Green|Spartan"))
+# Note: Baruch: It makes sense that Spartanburg SC & Greenville	SC have the same hours
+```
+
+
+```{r, fig.width=7}
+umr_inrix_cities %>% 
+slice(100:148) %>% 
+
+mutate(city = fct_reorder(city, desc(hours_delay_perAuto_commuter))) %>%
+  ggplot() +
+  geom_point(aes(x=city, y=hours_delay_perAuto_commuter),colour='blue', alpha=.6) + 
+  geom_point(aes(x=city, y=hours_lost_in_congestion),colour='orange', alpha=.6) + 
+  coord_flip() +
+  ggtitle('Cities where hours_lost_in_congestion is larger than hours_delay_perAuto_commuter ') + 
+  xlab('') + 
+  ylab('Value - Orange: hours_lost_in_congestion') + 
+  theme_bw() + 
+  theme(
+    plot.title = element_text(size=20),
+    axis.title.x = element_text(size=15),
+    axis.title.y = element_text(size=15)
+  )
+```
+
+
+

@@ -12,7 +12,7 @@ coli <- read.csv("coli_meric.csv") %>%
 
 
 #HM-10: Public road length, miles by ownership
-HM_10 <- read_excel("hm10.xls", sheet = "A") %>% 
+HM_10 <- read_excel("data/hm10.xls", sheet = "A") %>% 
   remove_empty() %>% 
   select(1, 2, 5, 8, 11) %>% 
   slice(-(1:6)) %>% 
@@ -28,7 +28,7 @@ HM_10 <- read_excel("hm10.xls", sheet = "A") %>%
 
 
 #HM-81: State highway agency-owned public roads; rural and urban miles, estimated lane-miles and daily travel
-HM_81 <- read_excel("hm81.xls", sheet  = "A") %>% 
+HM_81 <- read_excel("data/hm81.xls", sheet  = "A") %>% 
   remove_empty() %>% 
   select(1, 17) %>% 
   rename(state = 1,
@@ -40,7 +40,7 @@ HM_81 <- read_excel("hm81.xls", sheet  = "A") %>%
 
 #SF-4: Disbursements for state-administered highways (thousands of dollars)
 #Note: the 2020 numbers for some reason exactly match the 2019 numbers? 
-SF_4 <- read_excel("sf4.xlsx", sheet = "A") %>% 
+SF_4 <- read_excel("data/sf4.xlsx", sheet = "A") %>% 
   remove_empty() %>% 
   select(1:4, 8) %>% 
   rename(state = 1,
@@ -62,7 +62,7 @@ SF_4_adjusted <- SF_4 %>%
   select(-coli_index)
 
 #HM-64: Miles by measured pavement roughness
-HM64_rural_interstate <- read_excel("hm64.xls", sheet = "A") %>% 
+HM64_rural_interstate <- read_excel("data/hm64.xls", sheet = "A") %>% 
   remove_empty() %>% 
   select(1, 8:11) %>% 
   rename(state = 1,
@@ -76,7 +76,7 @@ HM64_rural_interstate <- read_excel("hm64.xls", sheet = "A") %>%
          rural_interstate_above_170 = rural_interstate_171_194 + rural_interstate_195_220 + rural_interstate_above_220)
   
 
-HM64_rural_OPA <- read_excel("hm64.xls", sheet = "B") %>% 
+HM64_rural_OPA <- read_excel("data/hm64.xls", sheet = "B") %>% 
   remove_empty() %>% 
   select(1, 20:21) %>% 
   rename(state = 1,
@@ -87,7 +87,7 @@ HM64_rural_OPA <- read_excel("hm64.xls", sheet = "B") %>%
   mutate(across(rural_OPA_above_220:rural_OPA_total, as.numeric))
   
   
-HM64_urban_interstate <- read_excel("hm64.xls", sheet = "C") %>% 
+HM64_urban_interstate <- read_excel("data/hm64.xls", sheet = "C") %>% 
   remove_empty() %>% 
   select(1, 8:11) %>% 
   rename(state = 1,
@@ -101,7 +101,7 @@ HM64_urban_interstate <- read_excel("hm64.xls", sheet = "C") %>%
          urban_interstate_above_170 = urban_interstate_171_194 + urban_interstate_195_220 + urban_interstate_above_220)
 
 
-HM64_urban_OPA <- read_excel("hm64.xls", sheet = "D") %>% 
+HM64_urban_OPA <- read_excel("data/hm64.xls", sheet = "D") %>% 
   remove_empty() %>% 
   select(1, 20:21) %>% 
   rename(state = 1,
@@ -110,7 +110,8 @@ HM64_urban_OPA <- read_excel("hm64.xls", sheet = "D") %>%
   slice(-(1:7)) %>% 
   filter(state %in% state.name) %>% 
   mutate(across(urban_OPA_above_220:urban_OPA_total, as.numeric))
-  
+
+# Combined HM-64: Miles by measured pavement roughness
 HM64 <- HM64_rural_interstate %>% 
   left_join(HM64_rural_OPA) %>% 
   left_join(HM64_urban_interstate) %>% 
@@ -127,7 +128,7 @@ HM64 <- HM64_rural_interstate %>%
 
 
 #FI-20: Persons fatally injured in motor vehicle crashes
-FI_20 <- read_excel("fi20.xls", sheet = "A") %>% 
+FI_20 <- read_excel("data/fi20.xls", sheet = "A") %>% 
   remove_empty() %>% 
   select(1:4, 10:12, 19) %>% 
   rename(state = 1,
@@ -146,7 +147,7 @@ FI_20 <- read_excel("fi20.xls", sheet = "A") %>%
 
 
 #VM-2: Annual vehicle miles
-VM_2 <- read_excel("vm2.xls", sheet = "A") %>%
+VM_2 <- read_excel("data/vm2.xls", sheet = "A") %>%
   select(1:4, 10:12, 18) %>% 
   rename(state = 1,
          rural_interstate_VMT = 2,
@@ -163,7 +164,7 @@ VM_2 <- read_excel("vm2.xls", sheet = "A") %>%
   select(state, total_VMT, rural_VMT, urban_VMT)
 
 #Bridge data
-bridge_raw <- read_excel("fccount21.xlsx", sheet = "2021")  
+bridge_raw <- read_excel("data/fccount21.xlsx", sheet = "2021")  
 
 bridge_total <- bridge_raw[1:58,] %>% 
   rename(state = 1) %>% 
@@ -184,99 +185,133 @@ bridge_poor <- bridge_raw[180:nrow(bridge_raw),] %>%
 bridge_data <- bridge_total %>% 
   left_join(bridge_poor)
 
-#Congestion data 
-source("Congestion data process.R")
+#Delay hours  using UMR data
 state_names <- data.frame(state.abb, state.name)     #need this to get state full names for congestion data
-  
-congestion_data_summary <- congestion_data_summary %>% 
+delay_data_summary <- readRDS("delay_data_summary.RDS") %>% 
   left_join(state_names, by = c("state" = "state.abb")) %>% 
   select(-state) %>% 
   rename(state = state.name) %>% 
   filter(!is.na(state))
-  
-#Bring everything together
-AHR_data <- list(HM_10, 
+
+# Cost of living
+
+cost_living_index <- read.csv("data/coli_meric.csv") %>% select(State, Coli_Index) %>% 
+  clean_names() %>% 
+  #mutate(coli_index = 1/coli_index) %>%  # reversed coli-index does not make any change in final ranking
+  mutate(coli_index = coli_index/100) %>%  # 
+  #mutate(coli_index = coli_index/-1) %>% 
+  slice(-c(50)) %>%  #remove DC and US
+  mutate(state = ifelse(state == "***", "United States", state))
+
+#Bring everything together - ONLY for 50 states
+AHR_states <- list(HM_10, 
                  HM_81, 
                  SF_4_adjusted, 
                  HM64, 
                  FI_20, 
                  VM_2, 
                  bridge_data, 
-                 congestion_data_summary) %>% 
-  reduce(left_join, by = "state")
+                 delay_data_summary) %>% 
+  reduce(left_join, by = "state") 
 
 #Calculate national metrics
-AHR_data_national <- AHR_data %>%
-  summarise(across(2:ncol(AHR_data), sum)) %>% 
+AHR_national <- AHR_states %>%
+  summarise(across(2:ncol(AHR_states), sum)) %>% 
   mutate(state = "United States")
 
-AHR_data <- bind_rows(AHR_data, AHR_data_national)
+AHR_data <- bind_rows(AHR_states, AHR_national) %>% 
+  left_join(cost_living_index) %>% 
 
-#Add SHA ratio
-AHR_data <- AHR_data %>% 
-  mutate(SHA_ratio = state_controlled_lane_miles / SHA_miles, .after = state_controlled_lane_miles)
-
+  #Add SHA ratio
+  mutate(SHA_ratio = state_controlled_lane_miles / SHA_miles, .after = state_controlled_lane_miles) %>% 
 
 #Calculate key metrics
-AHR_data <- AHR_data %>% 
   mutate(
     capital_disbursement_per_vmt = capital_disbursement / total_VMT * 1000,
-    
     maintenance_disbursement_per_vmt = maintenance_disbursement / total_VMT * 1000,
-    
     admin_disbursement_per_vmt = admin_disbursement / total_VMT * 1000,
-    
     # total_disbursement_per_lm = total_disbursement / state_controlled_lane_miles * 1000,
     
-    rural_interstate_poor_percent = rural_interstate_above_170 / rural_interstate_total * 100,
     
+    rural_interstate_poor_percent = rural_interstate_above_170 / rural_interstate_total * 100,
     urban_interstate_poor_percent = urban_interstate_above_170 / urban_interstate_total * 100,
     
+   
     rural_OPA_poor_percent = rural_OPA_above_220 / rural_OPA_total * 100,
-    
     urban_OPA_poor_percent = urban_OPA_above_220 / urban_OPA_total * 100,
-    
+   
     poor_bridges_percent = total_poor_bridges / total_bridges * 100,
     
     # total_fatalities_per_100m_VMT = total_fatalities / total_VMT * 100,
     
     rural_fatalities_per_100m_VMT = rural_I_OFE_OPA_fatalities / rural_VMT * 100,
-    
     urban_fatalities_per_100m_VMT = urban_I_OFE_OPA_fatalities / urban_VMT * 100,
     
-    state_avg_congestion_hours = state_tot_congestion_hours/state_tot_commuters
+    state_avg_delay_hours = state_tot_delay_hours/state_tot_commuters
   )
 
+#pivot col 27: state_avg_delay_hours
 
 #Calculate overall scores
-AHR_data_composite <- AHR_data %>% 
-  pivot_longer(cols = capital_disbursement_per_vmt:state_avg_congestion_hours, 
+AHR_data_composite_NOcoli <- AHR_data %>% 
+  pivot_longer(cols = state_avg_delay_hours : urban_fatalities_per_100m_VMT, 
                names_to = "key_metrics", 
-               values_to = "value") %>% 
+               values_to = "value") %>% # 
+  arrange(key_metrics) %>% 
+  filter(key_metrics != "coli_index") %>%  # overall_score NOT adjusted for COLI : 11 key metrics * 51
+  select(state, key_metrics, value) %>% 
+  group_by(key_metrics) %>% 
+  
+  mutate(relative_score = value / value[state == "United States"]) %>% 
+  ungroup() %>% 
+  group_by(state) %>% 
+  summarise(overall_score_NOcoli = mean(relative_score, na.rm = T)) %>% 
+  ungroup()
+
+  # overall_score adjusted for COLI  
+
+AHR_data_composite_WITHcoli <- AHR_data %>%  
+  
+  # adjust for coli index. So more relative expensive states will have LOWER adjusted disbursement, 
+  # while cheaper states will have HIGHER adjusted disbursement - all relatively compare to US index = 1
+  mutate(admin_disbursement_per_vmt_test = admin_disbursement_per_vmt/coli_index, 
+         maintenance_disbursement_per_vmt = maintenance_disbursement_per_vmt/coli_index,
+         capital_disbursement_per_vmt = capital_disbursement_per_vmt/coli_index) %>% 
+  
+  pivot_longer(cols = c(state_avg_delay_hours: urban_fatalities_per_100m_VMT), 
+               names_to = "key_metrics", 
+               values_to = "value") %>% # 12 key metrics ( 11 original + COLI) * 51 states
   arrange(key_metrics) %>% 
   select(state, key_metrics, value) %>% 
   group_by(key_metrics) %>% 
   mutate(relative_score = value / value[state == "United States"]) %>% 
   ungroup() %>% 
   group_by(state) %>% 
-  summarise(overall_score = mean(relative_score, na.rm = T)) %>% 
+  summarise(overall_score_WITHcoli = mean(relative_score, na.rm = T)) %>% 
   ungroup()
-  
+
+
+#overall score   
+AHR_data_composite <- AHR_data_composite_NOcoli %>% left_join(AHR_data_composite_WITHcoli)
+
 #Add overall scores to AHR_data
-AHR_data <- AHR_data %>% 
-  left_join(AHR_data_composite)
+AHR_data_rank <-  AHR_data %>% 
+  left_join(AHR_data_composite) %>%
 
 #Rank states according to the calculated metrics
-AHR_data_rank <- AHR_data %>% 
   filter(state != "United States") %>% 
   mutate(
-    across(capital_disbursement_per_vmt:overall_score, min_rank, .names = "{.col}_rank")
-  )
+    across(c(state_avg_delay_hours:overall_score_WITHcoli), min_rank, .names = "{.col}_rank")
+  ) 
 
-AHR_data <- AHR_data %>% 
+#final
+AHR_data_final <- AHR_data %>% 
   left_join(AHR_data_rank)
 
-write.csv(AHR_data, "AHR_data2.csv")
+AHR_data_final %>% select(state, 
+                          overall_score_NOcoli_rank, overall_score_WITHcoli_rank, coli_index) %>% arrange(desc(overall_score_WITHcoli_rank)) 
+
+write.csv(AHR_data_final, "AHR_data_umr_coli.csv")
 
 #Visualize AHR raw scores
 
