@@ -2,7 +2,7 @@ library(tidyverse)
 library(janitor)
 library(readxl)
 library(modelr)
-
+library(rio)
 
 #Cost of living index for later adjustment to spending numbers
 coli <- read.csv("coli_meric.csv") %>% 
@@ -129,38 +129,53 @@ HM64 <- HM64_rural_interstate %>%
 #FI-20: Persons fatally injured in motor vehicle crashes
 FI_20 <- read_excel("fi20.xls", sheet = "A") %>% 
   remove_empty() %>% 
-  select(1:4, 10:12, 19) %>% 
-  rename(state = 1,
-         rural_interstate_fatalities = 2,
-         rural_OFE_fatalities = 3,
-         rural_OPA_fatalities = 4,
-         urban_interstate_fatalities = 5,
-         urban_OFE_fatalities = 6,
-         urban_OPA_fatalities = 7,
-         total_fatalities = 8) %>% 
+  # select(1:4, 10:12, 19) %>% 
+  select(1, 9, 17) %>% 
+  rename(
+    state = 1,
+    rural_total_fatalities = 2,
+    urban_total_fatalities = 3
+    # rural_interstate_fatalities = 2,
+    # rural_OFE_fatalities = 3,
+    # rural_OPA_fatalities = 4,
+    # urban_interstate_fatalities = 5,
+    # urban_OFE_fatalities = 6,
+    # urban_OPA_fatalities = 7,
+    # total_fatalities = 8
+  ) %>% 
   filter(state %in% state.name) %>% 
-  mutate(across(rural_interstate_fatalities:total_fatalities, as.numeric),
-         rural_I_OFE_OPA_fatalities = rural_interstate_fatalities + rural_OFE_fatalities + rural_OPA_fatalities,
-         urban_I_OFE_OPA_fatalities = urban_interstate_fatalities + urban_OFE_fatalities + urban_OPA_fatalities) %>% 
-  select(state, total_fatalities, rural_I_OFE_OPA_fatalities, urban_I_OFE_OPA_fatalities)
+  mutate(
+    # across(rural_interstate_fatalities:total_fatalities, as.numeric),
+    across(2:3, as.numeric)
+    # rural_I_OFE_OPA_fatalities = rural_interstate_fatalities + rural_OFE_fatalities + rural_OPA_fatalities,
+    # urban_I_OFE_OPA_fatalities = urban_interstate_fatalities + urban_OFE_fatalities + urban_OPA_fatalities
+  ) 
+  # select(state, total_fatalities, rural_I_OFE_OPA_fatalities, urban_I_OFE_OPA_fatalities)
 
 
 #VM-2: Annual vehicle miles
 VM_2 <- read_excel("vm2.xls", sheet = "A") %>%
-  select(1:4, 10:12, 18) %>% 
-  rename(state = 1,
-         rural_interstate_VMT = 2,
-         rural_OFE_VMT = 3,
-         rural_OPA_VMT = 4,
-         urban_interstate_VMT = 5,
-         urban_OFE_VMT = 6,
-         urban_OPA_VMT = 7,
-         total_VMT = 8) %>% 
+  # select(1:4, 10:12, 18) %>% 
+  select(1,9,17,18) %>% 
+  rename(
+    state = 1,
+    rural_total_VMT = 2,
+    urban_total_VMT = 3,
+    # rural_interstate_VMT = 2,
+    # rural_OFE_VMT = 3,
+    # rural_OPA_VMT = 4,
+    # urban_interstate_VMT = 5,
+    # urban_OFE_VMT = 6,
+    # urban_OPA_VMT = 7,
+    total_VMT = 4
+    ) %>% 
   filter(state %in% state.name) %>% 
-  mutate(across(rural_interstate_VMT:total_VMT, as.numeric),
-         rural_VMT = rural_interstate_VMT + rural_OFE_VMT + rural_OPA_VMT,
-         urban_VMT = urban_interstate_VMT + urban_OFE_VMT + urban_OPA_VMT) %>% 
-  select(state, total_VMT, rural_VMT, urban_VMT)
+  mutate(
+    across(2:4, as.numeric)
+    # rural_VMT = rural_interstate_VMT + rural_OFE_VMT + rural_OPA_VMT,
+    # urban_VMT = urban_interstate_VMT + urban_OFE_VMT + urban_OPA_VMT
+  )
+  # select(state, total_VMT, rural_VMT, urban_VMT)
 
 #Bridge data
 bridge_raw <- read_excel("fccount21.xlsx", sheet = "2021")  
@@ -185,7 +200,7 @@ bridge_data <- bridge_total %>%
   left_join(bridge_poor)
 
 #Congestion data 
-source("Congestion data process.R")
+source("Congestion data process umr.R")
 state_names <- data.frame(state.abb, state.name)     #need this to get state full names for congestion data
   
 congestion_data_summary <- congestion_data_summary %>% 
@@ -234,23 +249,23 @@ AHR_data <- AHR_data %>%
     
     rural_OPA_poor_percent = rural_OPA_above_220 / rural_OPA_total * 100,
     
-    urban_OPA_poor_percent = urban_OPA_above_220 / urban_OPA_total * 100,
+    # urban_OPA_poor_percent = urban_OPA_above_220 / urban_OPA_total * 100,
     
     poor_bridges_percent = total_poor_bridges / total_bridges * 100,
     
     # total_fatalities_per_100m_VMT = total_fatalities / total_VMT * 100,
     
-    rural_fatalities_per_100m_VMT = rural_I_OFE_OPA_fatalities / rural_VMT * 100,
+    rural_fatalities_per_100m_VMT = rural_total_fatalities / rural_total_VMT * 100,
     
-    urban_fatalities_per_100m_VMT = urban_I_OFE_OPA_fatalities / urban_VMT * 100,
+    urban_fatalities_per_100m_VMT = urban_total_fatalities / urban_total_VMT * 100,
     
-    state_avg_congestion_hours = state_tot_congestion_hours/state_tot_commuters
+    state_avg_delay_hours = state_peak_delay/state_auto_commuters + state_remain_delay/state_population
   )
 
 
 #Calculate overall scores
 AHR_data_composite <- AHR_data %>% 
-  pivot_longer(cols = capital_disbursement_per_vmt:state_avg_congestion_hours, 
+  pivot_longer(cols = capital_disbursement_per_vmt:state_avg_delay_hours, 
                names_to = "key_metrics", 
                values_to = "value") %>% 
   arrange(key_metrics) %>% 
@@ -276,7 +291,7 @@ AHR_data_rank <- AHR_data %>%
 AHR_data <- AHR_data %>% 
   left_join(AHR_data_rank)
 
-write.csv(AHR_data, "AHR_data2.csv")
+export(AHR_data, "AHR_data 2022 alternative final 2.xlsx")
 
 #Visualize AHR raw scores
 
