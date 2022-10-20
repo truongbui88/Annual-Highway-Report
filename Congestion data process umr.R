@@ -10,14 +10,14 @@ vehicle_miles_data <- read_excel("HM-74 Daily Vehicle Miles Travelled.xlsx", she
 
 
 #Function to solve for "peak period delay" and "remaining delay" (see umr report's methodology)
-solve_delay <- function(commuters, pop, delay_per_commuter, total_delay){
-  a <- rbind(c(1/commuters, 1/pop),
-             c(1, 1))
-  b <- c(delay_per_commuter, total_delay)
-  
-  x <- solve(a,b)
-  return(x)
-}
+# solve_delay <- function(commuters, pop, delay_per_commuter, total_delay){
+#   a <- rbind(c(1/commuters, 1/pop),
+#              c(1, 1))
+#   b <- c(delay_per_commuter, total_delay)
+#   
+#   x <- solve(a,b)
+#   return(x)
+# }
 
 #Clean umr data and calculate peak period delay and remaining delay for each area
 state_list <- paste0(state.abb, collapse = "|")   #use this to remove state abbreviations later
@@ -33,15 +33,17 @@ umr_2020_clean <- umr_2020 %>%
     urban_area = `Urban Area`,
   ) %>% 
   select(urban_area, first_state, population, auto_commuters, total_hours_delay, hours_delay_perAuto_commuter) %>% 
-  mutate(across(population:hours_delay_perAuto_commuter, as.numeric)) %>% 
-  rowwise() %>% 
-  mutate(delay_numbers = list(solve_delay(commuters = auto_commuters,
-                                          pop = population, 
-                                          delay_per_commuter = hours_delay_perAuto_commuter, 
-                                          total_delay = total_hours_delay)),
-         peak_delay = delay_numbers[1],
-         remain_delay = delay_numbers[2]) %>% 
-  ungroup() %>% 
+  mutate(across(population:hours_delay_perAuto_commuter, as.numeric),
+         auto_commuters = auto_commuters * 1000,
+         population = population * 1000) %>% 
+  # rowwise() %>% 
+  # mutate(delay_numbers = list(solve_delay(commuters = auto_commuters,
+  #                                         pop = population, 
+  #                                         delay_per_commuter = hours_delay_perAuto_commuter, 
+  #                                         total_delay = total_hours_delay)),
+  #        peak_delay = delay_numbers[1],
+  #        remain_delay = delay_numbers[2]) %>% 
+  # ungroup() %>% 
   
   # clean city name 
   mutate(urban_area = str_remove_all(urban_area, " City"),
@@ -53,8 +55,8 @@ umr_2020_clean <- umr_2020 %>%
          first_city = str_split(city, "-", simplify = T)[,1],
          second_city = str_split(city, "-", simplify = T)[,2],
          third_city = str_split(city, "-", simplify = T)[,3]
-         ) %>% 
-  select(first_city, first_state, auto_commuters, population, peak_delay, remain_delay) 
+         )
+  # select(first_city, first_state, auto_commuters, population, peak_delay, remain_delay) 
   
   
 
@@ -138,26 +140,40 @@ vehicle_miles_data_clean <- vehicle_miles_data %>%
 
 # pred <- predict(model, congestion_data_non_inrix)
 
+
+
+
 #Combine inrix and non-inrix congestion data and add the daily vehicle miles traveled data to allocate the commuter number for multi-state areas
+state_names <- data.frame(state.abb, state.name)     #to get state full names 
+
 congestion_data_final <- umr_2020_clean %>% 
   left_join(vehicle_miles_data_clean, by = c("first_city", "first_state")) %>%
   mutate(dmvt_pct = ifelse(is.na(dmvt_pct), 1, dmvt_pct),
          state = ifelse(is.na(state), first_state, state),
          ad_auto_commuters = auto_commuters * dmvt_pct,
-         ad_population = population * dmvt_pct,
-         ad_peak_delay = peak_delay * dmvt_pct,
-         ad_remain_delay = remain_delay * dmvt_pct
+         ad_delay_hours = ad_auto_commuters * hours_delay_perAuto_commuter
+         # ad_population = population * dmvt_pct,
+         # ad_peak_delay = peak_delay * dmvt_pct,
+         # ad_remain_delay = remain_delay * dmvt_pct
          )
 
 #Calculate delay hours per commuter by state
 congestion_data_summary <- congestion_data_final %>% 
   group_by(state) %>% 
   summarise(state_auto_commuters = sum(ad_auto_commuters),
-            state_population = sum(ad_population),
-            state_peak_delay = sum(ad_peak_delay),
-            state_remain_delay = sum(ad_remain_delay)) %>% 
-  ungroup()
-  # mutate(state_avg_delay_hours = state_peak_delay/state_auto_commuters + state_remain_delay/state_population)
+            state_delay_hours = sum(ad_delay_hours)
+            # state_population = sum(ad_population),
+            # state_peak_delay = sum(ad_peak_delay),
+            # state_remain_delay = sum(ad_remain_delay)
+            ) %>% 
+  ungroup() %>% 
+  left_join(state_names, by = c("state" = "state.abb")) %>% 
+  select(-state) %>% 
+  rename(state = state.name) %>% 
+  filter(!is.na(state))
+  # mutate(state_avg_delay_hours = state_delay_hours/state_auto_commuters)
+  
+# mutate(state_avg_delay_hours = state_peak_delay/state_auto_commuters + state_remain_delay/state_population)
 
 
 
