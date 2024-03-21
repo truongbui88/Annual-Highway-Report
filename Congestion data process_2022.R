@@ -11,24 +11,22 @@ inrix <- read_csv("data/2022/delay_hour_2022_US_urban_area.csv") %>%
                  city = str_replace(urban_area, ".{2}$", ""),
                  city = str_trim(city)) %>% select(-urban_area)
 
-#TODO: find commuter_data_2022
-#https://data.census.gov/table/ACSST1Y2022.S0802?q=Commuting&y=2022
-#commuter_data_22 <- import("data/2022/ACSST1Y2022.S0802-2024-03-01T210409.xlsx", sheet = "Data", skip = 1) %>% 
- # slice(2:2)
+#TODO: find commuter_data_2022, table S0802: Means of transportation to work by selected characteristics. 
+#https://data.census.gov/table/ACSST5Y2022.S0802?g=010XX00US$31000M1
+# USE 1Y
 
-commuter_data <- import("ACS Commuter Data 2019.csv")
-
+commuter_data <- import("data/2022/ACSST1Y2022.S0802-Data.csv") %>% 
+  select(V2, V205, V407) %>% 
+  rename(area = 1, 
+         auto_commuters_alone = 2,
+         auto_commuters_carpooled = 3) %>% slice(-c(1:2))
+  
 #Clean data
 commuter_data_clean <- commuter_data %>% 
-  clean_names() %>% 
-  select(name, s0802_c02_001e, s0802_c03_001e) %>% 
-  rename(area = name,
-         auto_commuters_alone = s0802_c02_001e,
-         auto_commuters_carpooled = s0802_c03_001e) %>% 
   mutate(auto_commuters_alone = as.numeric(auto_commuters_alone),
          auto_commuters_carpooled = as.numeric(auto_commuters_carpooled),
          auto_commuters_combined = auto_commuters_alone + auto_commuters_carpooled/2.2) %>%    #2.2 is the average carpool occupancy. 
-  filter(!is.na(auto_commuters_alone)) %>% 
+  filter(!is.na(auto_commuters_alone)) %>%  
   mutate(city = str_replace(area, ",.*", ""),       #remove state name and area label (metro vs micro)
          city = str_replace(city, " City", ""),     #remove "City" in city names 
          first_city = str_split(city, "-", simplify = T)[,1],
@@ -84,7 +82,8 @@ congestion_data <- commuter_data_clean %>%
   ungroup()
 
 
-#Run a linear regression model to find the relationship between congestion hours (inrix data) and the number of auto commuters
+#Run a linear regression model to find the relationship between congestion hours (inrix data) 
+#and the number of auto commuters
 congestion_data_inrix <- congestion_data %>% 
   filter(!is.na(delay_hours))
 
@@ -102,7 +101,8 @@ congestion_data_non_inrix <- congestion_data %>%
 
 # pred <- predict(model, congestion_data_non_inrix)
 
-#Combine inrix and non-inrix congestion data and add the daily vehicle miles traveled data to allocate the commuter number for multi-state areas
+#Combine inrix and non-inrix congestion data and add the daily vehicle miles traveled data 
+#to allocate the commuter number for multi-state areas
 delay_data_final <- bind_rows(congestion_data_inrix, congestion_data_non_inrix) %>% 
   arrange(area) %>% 
   left_join(vehicle_miles_data_clean, by = c("first_city", "first_state")) %>%

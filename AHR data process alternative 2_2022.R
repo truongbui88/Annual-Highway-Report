@@ -50,7 +50,6 @@ HM_81 <- read_excel("data/2022/hm81.xls", sheet  = "A") %>%
          urban_lm_index = (pct_urban_lane_miles/US_pct_urban_lane_miles)) %>% 
   select(state, state_tot_lane_miles, pct_urban_lane_miles, urban_lm_index)
 
-  
 
 #SF-4: Disbursements for state-administered highways (thousands of dollars)
 #Note: the 2020 numbers for some reason exactly match the 2019 numbers? 
@@ -174,9 +173,9 @@ VM_2 <- read_excel("data/2022/vm2.xls", sheet = "A", skip = 13) %>%
   filter(state %in% state.name)
 
 #Bridge data
-#TODO: update 2022
-bridge_raw <- read_excel("data/fccount21.xlsx", sheet = "2021")  
-
+#https://www.fhwa.dot.gov/bridge/nbi/no10/fccount22.cfm
+bridge_raw <- import("data/2022/fccount22.xlsx", skip = 10)
+  
 bridge_total <- bridge_raw[1:58,] %>% 
   rename(state = 1) %>% 
   mutate(state = str_to_title(state)) %>% 
@@ -196,9 +195,9 @@ bridge_poor <- bridge_raw[180:nrow(bridge_raw),] %>%
 bridge_data <- bridge_total %>% 
   left_join(bridge_poor)
 
-
 #Congestion data 
 source("Congestion data process_2022.R")
+#TODO: double check with Truong and Baruch about using Inrix data
 
 #Bring everything together 
 AHR_states <- list(HM_10, 
