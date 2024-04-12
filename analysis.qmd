@@ -1,0 +1,80 @@
+---
+title: "analysis"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(stringr)
+library(modelr)
+library(rio)
+library(DT)
+df = data.frame(state.name, state.abb) 
+```
+
+# Viewing the changes between 2021 - 2022
+```{r}
+AHR_data_2022 <- read.csv("output/AHR_data_2022.csv") %>% select(-1) %>% arrange(state) 
+  #rename_with(~ paste0(., "_2022"), .cols = -1) 
+AHR_data_2021 <- read.csv("output/AHR_data_2021.csv") %>% select(-1) %>% arrange(state) 
+  #rename_with(~ paste0(., "_2021"), .cols = -1) 
+
+change <- AHR_data_2022[,-1] - AHR_data_2021[,-1]
+
+# change
+change_2021_2022 <- cbind(state = AHR_data_2022[, "state"], change)
+
+# check for several biggest changes: 
+change_2021_2022 %>% arrange(desc(state_controlled_lane_miles))
+
+AHR_data_2022 %>% filter(state == "Texas") #200262.2
+AHR_data_2021 %>% filter(state == "Texas") #198465.4
+
+
+# check for several biggest changes: 
+change_2021_2022 %>% arrange((total_disbursement))
+
+AHR_data_2022 %>% filter(state == "New York") #7717653
+AHR_data_2021 %>% filter(state == "New York") #14306404
+```
+# Change in overall ranking
+Note: assuming no change in congestion hours. 
+```{r}
+change_2021_2022 %>% select(state, overall_score_rank) %>% arrange(overall_score_rank) %>% 
+  filter(state != "United States") %>% 
+  mutate(group = case_when(overall_score_rank > 0 ~ "up",
+                           overall_score_rank == 0 ~ "no change",
+                           overall_score_rank < 0 ~ "down",
+                           )) %>% 
+  ggplot(aes(fct_reorder(state, overall_score_rank), overall_score_rank)) +
+  geom_col(aes(fill = group)) +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Change in overall ranking 2021 - 2022\n(Note: assuming no change in congestion hours)",
+       x = "") +
+  theme(axis.text.y = element_text(size = 6))
+```
+
+
+```{r}
+AHR_21_22 <-AHR_data_2022 %>% left_join(AHR_data_2021)
+
+AHR_21_22 %>% mutate(
+  change_SHAratio = SHA_ratio_2022 - SHA_ratio_2021,
+  change_congestion_hours_rank = state_avg_congestion_hours_2022 - state_avg_congestion_hours_2021,
+  change_overall_score = overall_score_2022 - overall_score_2021,
+  change_score_rank = overall_score_rank_2022 - overall_score_rank_2021
+) %>% 
+  select(state, change_congestion_hours_rank, change_score, change_rank) %>% arrange(desc(change_score))
+
+```
+
+
+
+
+
+
+

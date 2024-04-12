@@ -1,13 +1,23 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
 library(tidyverse)
-library(janitor)
 library(readxl)
+library(janitor)
+library(stringr)
 library(modelr)
-library(here)
 library(rio)
+library(DT)
+df = data.frame(state.name, state.abb) 
+```
 
-
+# FHW data - 2022
+```{r}
 #HM-10: Public road length, miles by ownership
-
 HM_10 <- import("data/2022/hm10.xls", sheet = "A") %>% 
   remove_empty() %>% 
   select(1, 2, 5, 8, 11) %>% 
@@ -35,7 +45,6 @@ HM_81 <- import("data/2022/hm81.xls", sheet  = "A") %>%
 
 
 #SF-4: Disbursements for state-administered highways (thousands of dollars)
-#Note: the 2020 numbers for some reason exactly match the 2019 numbers? 
 SF_4 <- import("data/2022/sf4.xlsx", sheet = "A") %>% 
   remove_empty() %>% 
   select(1:4, 8) %>% 
@@ -116,9 +125,8 @@ HM64 <- HM64_rural_interstate %>%
          urban_OPA_above_220,
          urban_OPA_total)
 
-
 #FI-20: Persons fatally injured in motor vehicle crashes
-FI_20 <- read_excel("fi20.xls", sheet = "A") %>% 
+FI_20 <- read_excel("data/2022/fi20.xls", sheet = "A") %>% 
   remove_empty() %>% 
   select(1:4, 10:12, 19) %>% 
   rename(state = 1,
@@ -150,13 +158,13 @@ VM_2 <- read_excel("data/2022/vm2.xls", sheet = "A") %>%
   filter(state %in% state.name) %>% 
   mutate(across(rural_interstate_VMT:total_VMT, as.numeric),
          rural_VMT = rural_interstate_VMT + rural_OFE_VMT + rural_OPA_VMT,
-         urban_VMT = urban_interstate_VMT + urban_OFE_VMT + urban_OPA_VMT) 
+         urban_VMT = urban_interstate_VMT + urban_OFE_VMT + urban_OPA_VMT) %>% 
   select(state, total_VMT, rural_VMT, urban_VMT)
 
-#Bridge data
-bridge_raw <- read_excel("fccount21.xlsx", sheet = "2021")  
+#Bridge data: https://www.fhwa.dot.gov/bridge/nbi/no10/fccount22.cfm#a
+bridge_raw <- read_excel("data/2022/fccount22.xlsx", sheet = "Sheet1")  
 
-bridge_total <- bridge_raw[1:58,] %>% 
+bridge_total <- bridge_raw[12:63,] %>% 
   rename(state = 1) %>% 
   mutate(state = str_to_title(state)) %>% 
   filter(state %in% state.name) %>% 
@@ -164,7 +172,7 @@ bridge_total <- bridge_raw[1:58,] %>%
   mutate(total_bridges = rowSums(across(where(is.numeric)))) %>% 
   select(state, total_bridges)
 
-bridge_poor <- bridge_raw[180:nrow(bridge_raw),] %>% 
+bridge_poor <- bridge_raw[195:nrow(bridge_raw),] %>% 
   rename(state = 1) %>% 
   mutate(state = str_to_title(state)) %>% 
   filter(state %in% state.name) %>% 
@@ -174,19 +182,24 @@ bridge_poor <- bridge_raw[180:nrow(bridge_raw),] %>%
 
 bridge_data <- bridge_total %>% 
   left_join(bridge_poor)
+```
 
-#Congestion data 
+# Congestion data 
+```{r}
 source("Congestion data process.R")
-state_names <- data.frame(state.abb, state.name)     #need this to get state full names for congestion data
-  
+
 congestion_data_summary <- congestion_data_summary %>% 
-  left_join(state_names, by = c("state" = "state.abb")) %>% 
+  left_join(df, by = c("state" = "state.abb")) %>% 
   select(-state) %>% 
   rename(state = state.name) %>% 
   filter(!is.na(state))
   
-#Bring everything together
-AHR_data <- list(HM_10, 
+```
+# Combined data
+
+50 states & national: 51 rows x 31 columns. 
+```{r}
+AHR_50states <- list(HM_10, 
                  HM_81, 
                  SF_4, 
                  HM64, 
@@ -194,22 +207,25 @@ AHR_data <- list(HM_10,
                  VM_2, 
                  bridge_data, 
                  congestion_data_summary) %>% 
-  reduce(left_join, by = "state")
+  reduce(left_join, by = "state") 
 
 #Calculate national metrics
-AHR_data_national <- AHR_data %>%
-  summarise(across(2:ncol(AHR_data), sum)) %>% 
+AHR_data_national <- AHR_50states %>%
+  summarise(across(2:ncol(AHR_50states), sum)) %>% 
   mutate(state = "United States")
 
-AHR_data <- bind_rows(AHR_data, AHR_data_national)
+AHR_combined <- bind_rows(AHR_50states, AHR_data_national)
+```
+# Calculate per unit of each component
 
-#Add SHA ratio
-AHR_data <- AHR_data %>% 
-  mutate(SHA_ratio = state_controlled_lane_miles / SHA_miles, .after = state_controlled_lane_miles)
+31 original columns + 14 per unit columns = 45
+```{r}
+AHR_perUnit <- AHR_combined %>% 
 
+    #Add SHA ratio
+  mutate(SHA_ratio = state_controlled_lane_miles / SHA_miles, .after = state_controlled_lane_miles) %>% 
 
-#Calculate key metrics
-AHR_data <- AHR_data %>% 
+   #Calculate key metrics
   mutate(
     capital_disbursement_per_lm = capital_disbursement / state_controlled_lane_miles * 1000,
     
@@ -237,10 +253,13 @@ AHR_data <- AHR_data %>%
     
     state_avg_congestion_hours = state_tot_congestion_hours/state_tot_commuters
   )
+```
 
+# Calculate scores based on per unit value of each component. 
 
+```{r}
 #Calculate overall scores
-AHR_data_composite <- AHR_data %>% 
+AHR_overall_score <- AHR_perUnit %>% 
   pivot_longer(cols = capital_disbursement_per_lm:state_avg_congestion_hours, 
                names_to = "key_metrics", 
                values_to = "value") %>% 
@@ -254,24 +273,22 @@ AHR_data_composite <- AHR_data %>%
   ungroup()
   
 #Add overall scores to AHR_data
-AHR_data <- AHR_data %>% 
-  left_join(AHR_data_composite)
+AHR_ <- AHR_perUnit %>% 
+  left_join(AHR_overall_score)
 
 #Rank states according to the calculated metrics
-AHR_data_rank <- AHR_data %>% 
+AHR_data_rank <- AHR_ %>% 
   filter(state != "United States") %>% 
   mutate(
     across(capital_disbursement_per_lm:overall_score, min_rank, .names = "{.col}_rank")
   )
 
-AHR_data <- AHR_data %>% 
+AHR_data_2022 <- AHR_ %>% 
   left_join(AHR_data_rank)
 
-write.csv(AHR_data, "AHR_data.csv")
 
+write.csv(AHR_data_2022, "output/AHR_data_2022.csv")
 
-
-
-
-
+AHR_data_2022 %>% select(state, 40)
+```
 

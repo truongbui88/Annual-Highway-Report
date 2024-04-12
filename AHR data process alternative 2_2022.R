@@ -151,7 +151,7 @@ HM64 <- HM64_rural_interstate %>%
 
 
 #FI-20: Persons fatally injured in motor vehicle crashes. 
-#TODO: Checked March 13, not yet available: https://www.fhwa.dot.gov/policyinformation/statistics/2022/
+#TODO: Checked April 2, not yet available: https://www.fhwa.dot.gov/policyinformation/statistics/2022/
 FI_20 <- read_excel("data/fi20.xls", sheet = "A", skip = 13) %>% 
   rename(state = 1) %>% 
   

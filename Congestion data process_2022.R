@@ -9,14 +9,20 @@ library(rio)
 inrix <- read_csv("data/2022/delay_hour_2022_US_urban_area.csv") %>% 
          mutate(state = str_extract(urban_area, ".{2}$"),
                  city = str_replace(urban_area, ".{2}$", ""),
-                 city = str_trim(city)) %>% select(-urban_area)
+                 city = str_trim(city)) %>% select(-urban_area) 
+  
+# count number of cities collected by state
 
-#TODO: find commuter_data_2022, table S0802: Means of transportation to work by selected characteristics. 
+inrix %>% add_count(state) %>% arrange(desc(n)) %>% select(state, n) %>% distinct()
+
+inrix %>% group_by(state) %>% 
+  summarise(tot_state = sum(delay_2022))
+#Commuter_data_2022, table S0802: Means of transportation to work by selected characteristics. 
 #https://data.census.gov/table/ACSST5Y2022.S0802?g=010XX00US$31000M1
 # USE 1Y
 
 commuter_data <- import("data/2022/ACSST1Y2022.S0802-Data.csv") %>% 
-  select(V2, V205, V407) %>% 
+  select(V2, V205, V407)
   rename(area = 1, 
          auto_commuters_alone = 2,
          auto_commuters_carpooled = 3) %>% slice(-c(1:2))
@@ -39,7 +45,8 @@ commuter_data_clean <- commuter_data %>%
          urban = ifelse(grepl("Metro Area", area), "Metro Area", "Micro Area")
          ) %>%
   filter(urban == "Metro Area") %>%   #retain metro areas only. 
-  relocate(area, city, first_city, second_city, third_city, first_state, urban)
+  relocate(area, city, first_city, second_city, third_city, first_state, urban) %>% 
+  mutate(across(where(is.character), str_trim))
 
 #vehicle miles data
 vehicle_miles_data <- read_excel("data/2022/hm74.xls", sheet = "A", skip = 12) %>% 
@@ -63,12 +70,15 @@ vehicle_miles_data_clean <- vehicle_miles_data %>%
          first_state = str_replace(first_state, ", ", "")) %>% 
   
   mutate(across(.cols = 3:7, .fns = as.numeric),
+         # total daily mile traveled 
          total_dmvt = interstate_total + ofe_total + opa_total + ma_total) %>%    
          #exclude "unreported" dvm based on the documentation and past results. 
          #Can change this later if we decide to include this number. 
    
   group_by(area) %>% 
-  mutate(dmvt_pct = total_dmvt/sum(total_dmvt)) %>%
+  ## the percent shared for each state in cases where a city counted in 2 states. 
+  #Eg. Augusta-Richmond County, GA--SC -->  GA =  .73, SC = .27
+  mutate(dmvt_pct = total_dmvt/sum(total_dmvt)) %>% 
   ungroup() %>% 
   select(area, first_city,  first_state, state, dmvt_pct)
 
