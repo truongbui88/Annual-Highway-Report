@@ -29,12 +29,12 @@ inrix <- read_csv("data/2022/delay_hour_2022_US_urban_area.csv") %>%
                 city = str_replace(urban_area, ".{2}$", ""),
                 city = str_replace_all(city, "City", ""),
       
-                city = str_squish(city)) %>% 
+                city = str_squish(city),
+                city = str_trim(city)) %>% 
         select(-c(`...1`, urban_area)) %>% 
   left_join(df)
 
-
-inrix 
+inrix %>% arrange(city) %>% filter(state.)
 
 ```
 
@@ -42,22 +42,21 @@ Count number of cities collected in IRIX by state
 
 ```{r}
 inrix %>% add_count(state.name) %>% 
-  arrange(desc(n)) %>% select(state.name, n) %>% 
-  distinct(state.name)
-```
+  arrange(desc(n)) %>% select(state.name, n) %>% distinct()
 
-Simple sum of delayed hour by state in INRIX
 
-```{r}
+# Simple sum of delayed hour by state in INRIX
+
 inrix %>% group_by(state.name) %>% 
-  summarise(total_delayed_hour_by_state = sum(delay_2022)) %>% arrange(desc(total_delayed_hour_by_state))
+  summarise(total_delayed_hour_by_state = sum(delay_2022)) %>% 
+  arrange(desc(total_delayed_hour_by_state))
 ```
 
-INRIX only provides delay hours for 295 US cities. Our goal is to use this data to extrapolate delay hours for more metro areas, and subsequently all states.
+INRIX only provides delay hours for 295 US cities. Our goal is to use this data to extrapolate delay hours for more cities, and subsequently all states.
 
 Our assumption is that delay hours is highly correlated with the number of auto commuters. In the next steps, we will:
 
--   get the auto commuters data for metro areas from ACS
+-   get the auto commuters data for cities/ metro areas from ACS
 -   quantify the relationship between the number of auto commuters and delay hours by running a simple linear model
 -   lastly, we use the coefficient from the model above to predict delay hours for other metro areas whose cities are not covered by INRIX.
 
@@ -68,6 +67,7 @@ Table S0802: Means of transportation to work by selected characteristics. https:
 This dataset contains 392 cities. It has `auto_commuters_alone`, `auto_commuters_carpooled`. We use these to calculate auto_commuters_combined, in which: auto_commuters_combined = auto_commuters_alone + auto_commuters_carpooled/2.2 (factor 2.2 is the average carpool occupancy).
 
 ```{r}
+# Only get commuter data for cities in state, not metro area
 commuter_data <- import("data/2022/ACSST1Y2022.S0802-Data.csv") %>% 
   select(V2, V205, V407) %>% 
   rename(city = 1, 
@@ -78,50 +78,80 @@ commuter_data <- import("data/2022/ACSST1Y2022.S0802-Data.csv") %>%
          #state = sub("Metro Area", "", state),
          city = sub(",.*", "", city), 
          city = sub("(city)|(City)|(municipality)|(town)|(CDP)", "", city),
-         city = str_squish(city)) 
-  #filter(state.name %in% df$state.name) 
+         city = str_squish(city)) %>% 
+  
+  #get state only, not metro areas
+  filter(state.name %in% df$state.name) %>% 
+  
+  mutate(city = case_when(city == "Nashville-Davidson metropolitan government (balance)" ~ "Nashville",
+                          city == "Urban Honolulu" ~ "Honolulu",
+                          city == "Indianapolis (balance)" ~ "Indianapolis",
+                          city == "North Port-Sarasota-Bradenton" ~ "Sarasota/Bradenton",
+                          
+         TRUE ~ as.character(city)),
+         city = str_squish(city),
+         city = str_trim(city)) %>% 
+  
+  # average person on car pooled UMR uses 1.6, last year reason uses 2.2 
+  mutate(auto_commuters_combined = as.numeric(auto_commuters_alone) + as.numeric(auto_commuters_carpooled)/1.6) %>% 
+select(-c(auto_commuters_alone, auto_commuters_carpooled))
   
 ```
+# Simple ranking 
 
 ```{r}
-acs_inrix <- commuter_data %>% 
+commuter_data %>% 
   left_join(inrix) %>% 
-  filter(state.name %in% df$state.name) %>% 
-  mutate(auto_commuters_combined = as.numeric(auto_commuters_alone) + as.numeric(auto_commuters_carpooled)/2.2)
+  filter(!is.na(delay_2022)) %>% 
+  group_by(state.name) %>% 
+  summarise(tot_delayed_hour_by_state = sum(delay_2022, na.rm = TRUE),
+            tot_commuter = sum(auto_commuters_combined, na.rm = TRUE),
+            delay_per_commuter = tot_delayed_hour_by_state/tot_commuter) %>% 
+  arrange(desc(delay_per_commuter)) %>% 
+  mutate(across(everything(), list(rank = ~rank(.x, ties.method = "average")), .names = "{.col}_Rank")) %>% 
+  select(state.name, tot_delayed_hour_by_state_Rank) %>% arrange(tot_delayed_hour_by_state_Rank)
 
-#acs_inrix has 646 observations, of which 191 have full data. Predict delay by auto commuters
 
-model <- lm(delay_2022 ~ auto_commuters_combined, data = acs_inrix)  
+```
+
+
+# Using model to predict delay hours
+```{r}
+acs_inrix <- commuter_data %>% 
+  left_join(inrix) 
+
+
+# only 193 out of 295 city in INRIX got joined with commuter data
+#because the rest of city in commuter data associate with metro area & different city names
+anti_join(inrix, acs_inrix, by = "city")
+anti_join(commuter_data, acs_inrix, by = "city")
+
+commuter_data %>% filter(str_detect(city, "Sarasota"))
+anti_join(acs_inrix, commuter_data, by = "city")
+
+
+#acs_inrix has 646 observations, of which 193 have full data. Predict delay by auto commuters
+model <- lm(delay_2022 ~ auto_commuters_combined + vmi+ pop , data = acs_inrix)  
 
 #Check model
 summary(model)
 ```
 
-The model predicts that for each increase of 10,000 auto commuters, a city's delay hours is expected to increase by .284 hour.
+The model predicts that for each increase of 100,000 auto commuters, a city's delay hours is expected to increase by 9.366 hours (last year got coefficient 2.84 hours).
 
 ```{r}
 #Use the model to predict the congestion hours for areas not included in the inrix data set
  acs_inrix %>% 
- # filter(is.na(delay_hours)) %>% 
-  add_predictions(model) 
-  mutate(delay_hours = pred) %>% 
-  select(-pred)
+  add_predictions(model) %>% 
+  select(-c(auto_commuters_alone, auto_commuters_carpooled, auto_commuters_combined, state.abb)) %>% 
+  group_by(state.name) %>% 
+  summarise(tot_delay_2022_inrix = sum(delay_2022, na.rm = TRUE),
+            tot_delay_prediction = sum(pred, na.rm = TRUE)) %>% 
+  mutate(across(everything(), list(rank = ~rank(.x, ties.method = "average")), .names = "{.col}_Rank")) %>% select(-state.name_Rank)
 
 ```
 
-```{r}
-commuter_data %>% anti_join(inrix) 
-
-# 104 do not have commuter data --> will bind back later
-inrix %>% anti_join(commuter_data) %>% filter(state.name == "Florida")
-```
-
-```{r}
-commuter_data %>% filter(state.name == "Florida") %>% arrange(city)
-  filter(str_detect(city, "(Sarasota)|(Bradenton)|(Alafaya)"))
-  
- 
-```
+# Draft
 
 ```{r}
 #Clean data

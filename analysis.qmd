@@ -22,24 +22,31 @@ AHR_data_2022 <- read.csv("output/AHR_data_2022.csv") %>% select(-1) %>% arrange
 AHR_data_2021 <- read.csv("output/AHR_data_2021.csv") %>% select(-1) %>% arrange(state) 
   #rename_with(~ paste0(., "_2021"), .cols = -1) 
 
+# calculate the change across all columns except the 1st = state name
 change <- AHR_data_2022[,-1] - AHR_data_2021[,-1]
 
-# change
+# adding state name back 
 change_2021_2022 <- cbind(state = AHR_data_2022[, "state"], change)
 
+change_2021_2022 %>% write.csv("output/change_2021_2022.csv")
 # check for several biggest changes: 
-change_2021_2022 %>% arrange(desc(state_controlled_lane_miles))
+change_2021_2022 %>% 
+  arrange(desc(state_controlled_lane_miles))
 
 AHR_data_2022 %>% filter(state == "Texas") #200262.2
 AHR_data_2021 %>% filter(state == "Texas") #198465.4
 
 
 # check for several biggest changes: 
-change_2021_2022 %>% arrange((total_disbursement))
+change_2021_2022 %>% 
+  arrange((total_disbursement))
 
 AHR_data_2022 %>% filter(state == "New York") #7717653
 AHR_data_2021 %>% filter(state == "New York") #14306404
 ```
+
+
+
 # Change in overall ranking
 Note: assuming no change in congestion hours. 
 ```{r}
