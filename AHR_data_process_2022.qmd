@@ -190,12 +190,25 @@ bridge_data <- bridge_total %>%
 # using Congestion data from previous year
 source("Congestion data process.R")
 
-congestion_data_by_state <- congestion_data_summary %>% 
+congestion_data_by_state_2021 <- congestion_data_summary %>% 
   left_join(df, by = c("state" = "state.abb")) %>% 
   select(-state) %>% 
   rename(state = state.name) %>% 
   filter(!is.na(state)) %>% arrange(desc(state_tot_congestion_hours))
   
+congestion_data_by_state_2021 %>% write.csv("output/congestion_data_by_state_2021.csv")
+```
+
+```{r}
+# using Congestion data 2022 Inrix & estimate
+source("Congestion data process_2022.R")
+congestion_data_by_state_2022 <- congestion_data_summary %>% 
+  left_join(df, by = c("state" = "state.abb")) %>% 
+  select(-state) %>% 
+  rename(state = state.name) %>% 
+  filter(!is.na(state)) %>% arrange(desc(state_tot_congestion_hours))
+
+congestion_data_by_state_2022 %>% write.csv("output/congestion_data_by_state_2022.csv")
 ```
 
 # Combined data
@@ -209,7 +222,7 @@ AHR_50states <- list(HM_10,
                  FI_20, 
                  VM_2, 
                  bridge_data, 
-                 congestion_data_by_state) %>% 
+                 congestion_data_by_state_2022) %>% 
   reduce(left_join, by = "state") 
 
 #Calculate national metrics
@@ -292,7 +305,5 @@ AHR_data_2022 <- AHR_ %>%
 
 write.csv(AHR_data_2022, "output/AHR_data_2022.csv")
 
-AHR_data_2022 %>% filter(state == "Idaho")
-  select(state, 40)
 ```
 

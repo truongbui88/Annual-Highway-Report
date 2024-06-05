@@ -10,16 +10,12 @@ library(rio)
 inrix <- read_csv("data/2022/delay_hour_2022_US_urban_area.csv") %>% 
          mutate(state = str_extract(urban_area, ".{2}$"),
                  city = str_replace(urban_area, ".{2}$", ""),
-                 city = str_trim(city)) %>% select(-urban_area) 
+                 city = str_trim(city)) %>% select(-urban_area) %>% select(-1)
   
 # count number of cities collected by state
-
-inrix_city_by_state <- inrix %>% add_count(state) %>% arrange(desc(n)) %>% 
+inrix %>% add_count(state) %>% arrange(desc(n)) %>% 
   select(state, n) %>% distinct()
 
-inrix_tot_delayhour_by_state <- inrix %>% add_count(state) %>% 
-  group_by(state) %>% 
-  summarise(tot_state = sum(delay_2022)) %>% arrange(desc(tot_state))
 
 #######Commuter_data_2022##########
 
@@ -27,7 +23,11 @@ inrix_tot_delayhour_by_state <- inrix %>% add_count(state) %>%
 #https://data.census.gov/table/ACSST5Y2022.S0802?g=010XX00US$31000M1
 # USE 1Y
 
-commuter_data <- import("data/2022/ACSST1Y2022.S0802-Data.csv") %>% 
+# Note: Using either file to get data for metro area. 
+#ACSST1Y2022.S0802-Data_metro area.csv metro_area = 394,
+#data/2022/ACSST1Y2022.S0802-Data.csv -> # cities = 1040 rows
+
+commuter_data <- import("data/2022/ACSST1Y2022.S0802-Data_metro area.csv") %>% 
   select(V2, V205, V407) %>% 
   rename(area = 1, 
          auto_commuters_alone = 2,
@@ -52,42 +52,42 @@ commuter_data_clean <- commuter_data %>%
          ) %>%
   filter(urban == "Metro Area") %>%   #retain metro areas only. 
   relocate(area, city, first_city, second_city, third_city, first_state, urban) %>% 
-  mutate(across(where(is.character), str_trim))
+  mutate(across(where(is.character), str_trim))  %>% 
+  select(-c(area, urban, city, auto_commuters_alone, auto_commuters_carpooled))
 
 
 ###########Combine commuter data (ACS) and Inrix data#########
 
+# Average congestion hours = taking average congestion hours of cities of each metro area
 congestion_data <- commuter_data_clean %>% 
   left_join(inrix, by = c("first_state" = "state", "first_city" = "city")) %>% 
   left_join(inrix, by = c("first_state" = "state", "second_city" = "city")) %>% 
   left_join(inrix, by = c("first_state" = "state", "third_city" = "city")) %>% 
   rowwise() %>% 
-  mutate(delay_hours = mean(c(delay_2022.x, delay_2022.y, delay_2022), na.rm = T)) %>% 
-  ungroup()
-
+  mutate(avg_congestion_hours = mean(c(delay_2022, delay_2022.x, delay_2022.y), na.rm = T)) %>% 
+  ungroup() %>% 
+  select(first_state, first_city, auto_commuters_combined, avg_congestion_hours)
+  
 
 #Run a linear regression model to find the relationship between congestion hours (inrix data) 
 #and the number of auto commuters
-congestion_data_inrix <- congestion_data %>% 
-  filter(!is.na(delay_hours))
 
-model <- lm(delay_hours ~ auto_commuters_combined, data = congestion_data_inrix)  
+model <- lm(avg_congestion_hours ~ auto_commuters_combined, data = congestion_data)  
 
 #Check model
 summary(model)
 
 #Use the model to predict the congestion hours for areas not included in the inrix data set
-congestion_data_non_inrix <- congestion_data %>% 
-  filter(is.na(delay_hours)) %>% 
+congestion_data_inrix_pred <- congestion_data %>% 
   add_predictions(model) %>% 
-  mutate(delay_hours = pred) %>% 
-  select(-pred)
-
-# pred <- predict(model, congestion_data_non_inrix)
+  mutate(pred_different = avg_congestion_hours - pred) %>%  # how far off is the prediction?
+ 
+  # impute estimated values to those with na values. Keep the inrix value where available
+  mutate(congestion_hours_imputed = ifelse(is.na(avg_congestion_hours), pred, avg_congestion_hours))
 
 #########Daily vehicle miles traveled data###############
 
-#Combine inrix and non-inrix congestion data and add the daily vehicle miles traveled data 
+#Combine inrix and estimated congestion data and add the daily vehicle miles traveled data 
 #to allocate the commuter number for multi-state areas
 
 #vehicle miles data
@@ -122,16 +122,15 @@ vehicle_miles_data_clean <- vehicle_miles_data %>%
   #Eg. Augusta-Richmond County, GA--SC -->  GA =  .73, SC = .27
   mutate(dmvt_pct = total_dmvt/sum(total_dmvt)) %>% 
   ungroup() %>% 
-  select(area, first_city,  first_state, state, dmvt_pct)
+  select(area, first_city, first_state, state, dmvt_pct)
 
-#Delay hours - final 
+#congestion_data_final
 
-delay_data_final <- bind_rows(congestion_data_inrix, congestion_data_non_inrix) %>% 
-  arrange(area) %>% 
+congestion_data_final <- congestion_data_inrix_pred %>% 
   left_join(vehicle_miles_data_clean, by = c("first_city", "first_state")) %>%
   mutate(dmvt_pct = ifelse(is.na(dmvt_pct), 1, dmvt_pct),
          state = ifelse(is.na(state), first_state, state),
-         total_delay_hours = delay_hours * auto_commuters_combined * dmvt_pct,
+         total_congestion_hours = congestion_hours_imputed * auto_commuters_combined * dmvt_pct,
          adjusted_auto_commuters_combined = auto_commuters_combined * dmvt_pct)
 
 #Calculate congestion hours per commuter by state
@@ -139,15 +138,15 @@ df_state = data.frame(state.abb, state.name) %>%
   add_row(state.abb = c("DC", "PR"),
           state.name = c("District of Columbia", "Puerto Rico"))
 
-delay_data_summary <- delay_data_final %>% 
+congestion_data_summary <- congestion_data_final %>% 
   group_by(state) %>% 
-  summarise(state_tot_delay_hours = sum(total_delay_hours),
+  summarise(state_tot_congestion_hours = sum(total_congestion_hours),
             state_tot_commuters = sum(adjusted_auto_commuters_combined)) %>% 
-  ungroup() %>% 
-  left_join(df_state, by = c("state" = "state.abb")) %>% 
-  select(-state) %>% 
-  rename(state = state.name) %>% arrange(desc(state_tot_delay_hours)) %>% select(state, state_tot_delay_hours)
-  # mutate(state_avg_delay_hours = state_tot_delay_hours/state_tot_commuters)
+  ungroup() 
+
+  # left_join(df_state, by = c("state" = "state.abb")) %>% 
+  # select(-state) %>% 
+  # rename(state = state.name) 
 
 
 
