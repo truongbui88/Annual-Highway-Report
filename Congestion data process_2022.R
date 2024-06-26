@@ -6,7 +6,7 @@ library(modelr)
 library(rio)
 
 #########INRIX##########
-#Scraped form this link, hosted on github repo thuy2020/inrix_scraping: https://inrix.com/scorecard/
+#Scraped from this link, hosted on github repo thuy2020/inrix_scraping: https://inrix.com/scorecard/
 inrix <- read_csv("data/2022/delay_hour_2022_US_urban_area.csv") %>% 
          mutate(state = str_extract(urban_area, ".{2}$"),
                  city = str_replace(urban_area, ".{2}$", ""),

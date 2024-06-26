@@ -1,6 +1,8 @@
 ---
 title: "AHR Report - 2022"
 format: html
+warnings: false
+messages: false
 editor: visual
 ---
 
@@ -11,11 +13,13 @@ library(janitor)
 library(stringr)
 library(modelr)
 library(rio)
-library(DT)
+# using Congestion data 2022 Inrix & estimate
+source("Congestion data process_2022.R")
 df = data.frame(state.name, state.abb) 
 ```
 
 # FHW data - 2022
+
 ```{r}
 #HM-10: Public road length, miles by ownership
 HM_10 <- import("data/2022/hm10.xls", sheet = "A") %>% 
@@ -185,35 +189,22 @@ bridge_data <- bridge_total %>%
   left_join(bridge_poor)
 ```
 
-# Congestion data - using UMR data 
-```{r}
-# using Congestion data from previous year
-source("Congestion data process.R")
-
-congestion_data_by_state_2021 <- congestion_data_summary %>% 
-  left_join(df, by = c("state" = "state.abb")) %>% 
-  select(-state) %>% 
-  rename(state = state.name) %>% 
-  filter(!is.na(state)) %>% arrange(desc(state_tot_congestion_hours))
-  
-congestion_data_by_state_2021 %>% write.csv("output/congestion_data_by_state_2021.csv")
-```
+## Congestion data
 
 ```{r}
-# using Congestion data 2022 Inrix & estimate
-source("Congestion data process_2022.R")
 congestion_data_by_state_2022 <- congestion_data_summary %>% 
   left_join(df, by = c("state" = "state.abb")) %>% 
   select(-state) %>% 
   rename(state = state.name) %>% 
   filter(!is.na(state)) %>% arrange(desc(state_tot_congestion_hours))
 
-congestion_data_by_state_2022 %>% write.csv("output/congestion_data_by_state_2022.csv")
+#congestion_data_by_state_2022 %>% write.csv("output/congestion_data_by_state_2022.csv")
 ```
 
 # Combined data
 
-50 states & national: 51 rows x 31 columns. 
+50 states & national: 51 rows x 31 columns.
+
 ```{r}
 AHR_50states <- list(HM_10, 
                  HM_81, 
@@ -232,9 +223,11 @@ AHR_data_national <- AHR_50states %>%
 
 AHR_combined <- bind_rows(AHR_50states, AHR_data_national)
 ```
+
 # Calculate per unit of each component
 
 31 original columns + 14 per unit columns = 45
+
 ```{r}
 AHR_perUnit <- AHR_combined %>% 
 
@@ -271,7 +264,7 @@ AHR_perUnit <- AHR_combined %>%
   )
 ```
 
-# Calculate scores based on per unit value of each component. 
+# Calculate scores based on per unit value of each component.
 
 ```{r}
 #Calculate overall scores
@@ -300,10 +293,10 @@ AHR_data_rank <- AHR_ %>%
   )
 
 AHR_data_2022 <- AHR_ %>% 
-  left_join(AHR_data_rank)
+  left_join(AHR_data_rank) %>% 
+  mutate_if(is.numeric, ~round(., 2))
 
 
 write.csv(AHR_data_2022, "output/AHR_data_2022.csv")
 
 ```
-
