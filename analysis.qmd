@@ -1,6 +1,8 @@
 ---
 title: "The 28th Annyal Highway Report - Visualization"
-format: html
+format: 
+  html: 
+    embed-resources: true
 warnings: false
 messages: false
 toc: true
