@@ -36,7 +36,6 @@ HM_10 <- import("data/2022/hm10.xls", sheet = "A") %>%
          SHA_miles = rural_SHA + urban_SHA) %>% 
   select(state, SHA_miles)
 
-
 #HM-81: State highway agency-owned public roads; rural and urban miles, estimated lane-miles and daily travel
 HM_81 <- import("data/2022/hm81.xls", sheet  = "A") %>% 
   remove_empty() %>% 
@@ -47,6 +46,9 @@ HM_81 <- import("data/2022/hm81.xls", sheet  = "A") %>%
   filter(state %in% state.name) %>% 
   mutate(state_controlled_lane_miles = as.numeric(state_controlled_lane_miles))
 
+```
+
+```{r}
 
 #SF-4: Disbursements for state-administered highways (thousands of dollars)
 SF_4 <- import("data/2022/sf4.xlsx", sheet = "A") %>% 
