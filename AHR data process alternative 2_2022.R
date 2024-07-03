@@ -4,8 +4,7 @@ library(readxl)
 library(modelr)
 library(rio)
 library(broom)
-library(plotly)
-
+df = data.frame(state.name, state.abb) 
 
 #HM-10: Public road length, miles by ownership
 HM_10 <- read_excel("data/2022/hm10.xls", sheet = "A") %>% 
@@ -25,17 +24,13 @@ HM_10 <- read_excel("data/2022/hm10.xls", sheet = "A") %>%
 
 #HM-81: State highway agency-owned public roads; rural and urban miles, estimated lane-miles and daily travel
 
-#Note: In California Policy Center report, the table shows "total lane miles" BUT it probably refers to dvmt infact. 
-#https://californiapolicycenter.org/californias-transportation-future-part-four-the-common-road/
-
 HM_81 <- read_excel("data/2022/hm81.xls", sheet  = "A") %>% 
   remove_empty() %>% 
   rename(state = 1,
          state_urban_lane_miles = 10,
          #state_urban_dvmt = 11,
          #state_tot_dvmt = 18
-         state_tot_lane_miles = 17,
-  ) %>% 
+         state_tot_lane_miles = 17) %>% 
   select(state, state_urban_lane_miles, state_tot_lane_miles) %>% 
   filter(state %in% state.name) %>% 
   mutate(across(state_urban_lane_miles:state_tot_lane_miles, as.numeric)) %>% 
@@ -52,16 +47,16 @@ HM_81 <- read_excel("data/2022/hm81.xls", sheet  = "A") %>%
 
 
 #SF-4: Disbursements for state-administered highways (thousands of dollars)
-#Note: the 2020 numbers for some reason exactly match the 2019 numbers? 
+
 SF_4 <- read_excel("data/2022/sf4.xlsx", sheet = "A") %>% 
   remove_empty() %>% 
   select(1:7) %>% 
   rename(state = 1,
          capital_disbursement = 2,
          maintenance_disbursement = 3,
-         admin_disbursement = 4) %>%
+         admin_disbursement = 4) %>% 
   slice(-(1:6)) %>% 
-  
+  filter(state %in% state.name) %>% 
   mutate(state = str_replace_all(state, "[:punct:]", ""),    #remove all special characters
          state = str_replace_all(state, "[:digit:]", ""),    #remove all numbers
          state = str_trim(state),
@@ -73,7 +68,7 @@ SF_4 <- read_excel("data/2022/sf4.xlsx", sheet = "A") %>%
          maintenance_disbursement = maintenance_disbursement * 1000, 
          admin_disbursement = admin_disbursement * 1000,
          other_disbursement = other_disbursement * 1000) %>% 
-  filter(state %in% state.name) %>% select(-c(5:7))
+  select(-c(5:7))
 
 # Adjusting 4 categories of disbursement for urban_lm_index 
 # SF_4_adjusted <- SF_4 %>% 
@@ -83,7 +78,6 @@ SF_4 <- read_excel("data/2022/sf4.xlsx", sheet = "A") %>%
 
 # write_csv(SF_4_adjusted, "SF_4_adjusted_coliIndex_urbanDvmtIndex.csv")
   
-
 #HM-64: Miles by measured pavement roughness
 HM64_rural_interstate <- read_excel("data/2022/hm64.xls", sheet = "A") %>% 
   remove_empty() %>% 
@@ -149,18 +143,16 @@ HM64 <- HM64_rural_interstate %>%
          urban_OPA_above_220,
          urban_OPA_total)
 
-
 #FI-20: Persons fatally injured in motor vehicle crashes. 
-#TODO: Checked April 2, not yet available: https://www.fhwa.dot.gov/policyinformation/statistics/2022/
-FI_20 <- read_excel("data/fi20.xls", sheet = "A", skip = 13) %>% 
+FI_20 <- read_excel("data/2022/fi20.xls", sheet = "A", skip = 13) %>% 
   rename(state = 1) %>% 
-  
+  filter(state %in% state.name) %>% 
   # 3 groups of fatality
   mutate(rural_fatality_interstate_OFE_OPA = (`...2` + `EXPRESSWAYS...3` + ARTERIAL...4),
          urban_fatality_interstate_OFE_OPA = (`...10` + `EXPRESSWAYS...11` + ARTERIAL...12),
          other_fatality = (ARTERIAL...5 + COLLECTOR...6 + COLLECTOR...7 + `...8` + ARTERIAL...13 + COLLECTOR...14 + COLLECTOR...15 + `...16`)) %>% 
-  select(1, 20:22) %>% 
-  filter(state %in% state.name)
+  select(1, rural_fatality_interstate_OFE_OPA, urban_fatality_interstate_OFE_OPA, other_fatality) 
+  
 
 #VM-2: Annual vehicle miles
 VM_2 <- read_excel("data/2022/vm2.xls", sheet = "A", skip = 13) %>% 
@@ -174,7 +166,7 @@ VM_2 <- read_excel("data/2022/vm2.xls", sheet = "A", skip = 13) %>%
 
 #Bridge data
 #https://www.fhwa.dot.gov/bridge/nbi/no10/fccount22.cfm
-bridge_raw <- import("data/2022/fccount22.xlsx", skip = 10)
+bridge_raw <- import("data/2022/fccount22.xlsx", sheet = "Sheet1", skip = 10)
   
 bridge_total <- bridge_raw[1:58,] %>% 
   rename(state = 1) %>% 
@@ -195,28 +187,37 @@ bridge_poor <- bridge_raw[180:nrow(bridge_raw),] %>%
 bridge_data <- bridge_total %>% 
   left_join(bridge_poor)
 
-#Congestion data 
+######Congestion data#######
+# using Congestion data 2022 Inrix & estimated values
 source("Congestion data process_2022.R")
-#TODO: double check with Truong and Baruch about using Inrix data
 
-#Bring everything together 
-AHR_states <- list(HM_10, 
+congestion_data_by_state_2022 <- congestion_data_summary %>% 
+  left_join(df, by = c("state" = "state.abb")) %>% 
+  select(-state) %>% 
+  rename(state = state.name) %>% 
+  filter(!is.na(state)) %>% arrange(desc(state_tot_congestion_hours))
+
+
+######Combined data########
+AHR_50states <- list(HM_10, 
                    HM_81, 
                    SF_4, 
                    HM64, 
                    FI_20, 
                    VM_2, 
                    bridge_data, 
-                   delay_data_summary) %>% 
+                   congestion_data_by_state_2022) %>% 
   reduce(left_join, by = "state") 
 
 #Calculate national metrics
-AHR_national <- AHR_states %>%
-  summarise(across(2:ncol(AHR_states), sum)) %>% 
+AHR_data_national <- AHR_50states %>%
+  summarise(across(2:ncol(AHR_50states), sum)) %>% 
   mutate(state = "United States")
 
-AHR_data <- bind_rows(AHR_states, AHR_national) %>% 
+AHR_combined <- bind_rows(AHR_50states, AHR_data_national) 
 
+####Calculate per unit of each component####
+AHR_perUnit <- AHR_combined %>% 
   #Add SHA ratio
   mutate(SHA_ratio = state_tot_lane_miles / SHA_miles, .after = state_tot_lane_miles) %>% 
 
@@ -234,8 +235,9 @@ AHR_data <- bind_rows(AHR_states, AHR_national) %>%
     rural_OPA_poor_percent = rural_OPA_above_220 / rural_OPA_total * 100,
     urban_OPA_poor_percent = urban_OPA_above_220 / urban_OPA_total * 100,
    
-    #Delay Hours
-    state_avg_delay_hours = state_tot_delay_hours / state_tot_commuters,
+
+    #Congestion Hours
+    state_avg_congestion_hours = state_tot_congestion_hours / state_tot_commuters,
     
     #Bridge
     poor_bridges_percent = total_poor_bridges / total_bridges * 100,
@@ -248,7 +250,7 @@ AHR_data <- bind_rows(AHR_states, AHR_national) %>%
 
 
 #Calculate disbursement scores adjusted by urban miles percentage using linear regression
-disbursement_data <- AHR_data %>% 
+disbursement_data <- AHR_perUnit %>% 
   select(state, pct_urban_lane_miles, capital_disbursement_perlm, maintenance_disbursement_perlm,
          admin_disbursement_perlm, other_disbursement_perlm) %>% 
   filter(state != "United States") %>%   #exclude the US numbers from the data
@@ -261,34 +263,6 @@ disbursement_model_lm <- disbursement_data %>%
   mutate(fit = map(data, ~ lm(value ~ pct_urban_lane_miles, data = .x)),
          tidied = map(fit, tidy)) %>% 
   unnest(tidied)
-
-# test_data <- disbursement_data %>%
-#   filter(key_metrics == "other_disbursement_perlm")
-# 
-# model_lm <- lm(value ~ pct_urban_lane_miles, data = test_data)
-# summary(model_lm)
-# model_lm$residuals
-# sigma(model_lm)
-# 
-# ggplot(test_data, aes(x = pct_urban_lane_miles, y = value)) +
-#   geom_point() +
-#   geom_smooth(method = "lm") +
-#   geom_point(data = test_data %>% filter(state == "Maine"), col = "red")
-
- #Comment: there's a problem with the linear model for the "other_disbursement" data: some predicted values are negative
-
- #Check local regression model
-# model_loess <- loess(value ~ pct_urban_lane_miles, data = test_data)
-# summary(model_loess)
-# residuals(model_loess)
-# model_loess$s
-# 
-# 
-# ggplot(test_data, aes(x = pct_urban_lane_miles, y = value)) +
-#   geom_point() +
-#   geom_smooth(method = "loess") +
-#   geom_point(data = test_data %>% filter(state == "Maine"), col = "red")
-
 
  #Get fitted values (expected spending per lane mile given some level of urban roads)
 disbursement_data <- disbursement_data %>% 
@@ -304,7 +278,7 @@ disbursement_data <- disbursement_data %>%
 
 
 #Calculate scores and rankings
-scores <- AHR_data %>% 
+scores <- AHR_perUnit %>% 
   pivot_longer(cols = rural_interstate_poor_percent:other_fatalities_per_100m_VMT, 
                names_to = "key_metrics", 
                values_to = "value") %>% 
@@ -326,12 +300,12 @@ scores <- AHR_data %>%
   
 
 #List of data frames to be exported
-data_list <- list("AHR Data" = AHR_data,
+data_list <- list("AHR Data" = AHR_perUnit,
                   "Scores & Rankings" = scores,
                   "Disbursement Data" = disbursement_data)
 
 
-rio::export(data_list, "output/AHR_2022_final.xlsx")
+rio::export(data_list, "output/AHR_2022_jul022024.xlsx")
 
 
 

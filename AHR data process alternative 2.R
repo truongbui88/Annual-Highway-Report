@@ -243,7 +243,7 @@ AHR_data <- bind_rows(AHR_states, AHR_national) %>%
     urban_OPA_poor_percent = urban_OPA_above_220 / urban_OPA_total * 100,
    
     #Delay Hours
-    state_avg_delay_hours = state_delay_hours / state_auto_commuters,
+    state_avg_delay_hours = state_tot_delay_hours / state_tot_commuters,
     
     #Bridge
     poor_bridges_percent = total_poor_bridges / total_bridges * 100,
