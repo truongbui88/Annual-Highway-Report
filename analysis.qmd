@@ -43,17 +43,11 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 ```{r}
 #| echo: false
-AHR_data_2022 <- read.csv("output/AHR_data_2022.csv") %>% select(-1) %>% arrange(state) 
-  #rename_with(~ paste0(., "_2022"), .cols = -1) 
-AHR_data_2021 <- read.csv("output/AHR_data_2021.csv") %>% select(-1) %>% arrange(state) 
-  #rename_with(~ paste0(., "_2021"), .cols = -1) 
+AHR_data_2022 <- readxl::read_excel("output/AHR_data_2022.xlsx", sheet = 2) %>% arrange(state) 
 
-states_map <- st_as_sf(map("state", plot = FALSE, fill = TRUE))
-AHR_data_2022 %>% 
-  filter(state != "United States") %>% 
-  select(state, contains("rank")) %>% 
-mutate(state = str_to_lower(state)) %>% left_join(states_map, by = c("state" = "ID")) -> d_map
-d_map <- st_as_sf(d_map)
+# Data for last year report Truong sent via email on Feb 22, 2024. 
+AHR_data_2021 <- readxl::read_excel("data/2022/AHR_data 2022 alternative final 4.xlsx", sheet = 2) %>% arrange(state) 
+
 
 ```
 
@@ -68,9 +62,16 @@ AHR_data_2022 %>%
 ```
 
 ```{r}
+states_map <- st_as_sf(map("state", plot = FALSE, fill = TRUE))
+
+d_map <- AHR_data_2022 %>% 
+  filter(state != "United States") %>% 
+  select(state, contains("rank")) %>% 
+mutate(state = str_to_lower(state)) %>% left_join(states_map, by = c("state" = "ID"))  
+d_map <- st_as_sf(d_map)
+
 create_maps(d_map, c("overall_score_rank"))
 ```
-
 
 # Ranking by category
 
@@ -85,17 +86,12 @@ AHR_data_2022 %>% filter(state != "United States") %>%
 ```{r}
 
 AHR_data_2022 %>% filter(state != "United States") %>% 
-  select(state, capital_disbursement_per_lm, maintenance_disbursement_per_lm, admin_disbursement_per_lm, 
-         total_disbursement_per_lm) %>%
+  select(state, contains("disbursement")) %>%
   datatable()
 ```
 
-```{r}
-create_maps(d_map, c("total_disbursement_per_lm_rank"))
-```
-
-
 # Pavement condition
+
 ```{r}
 AHR_data_2022 %>% filter(state != "United States") %>% 
   select(state, rural_interstate_poor_percent, urban_interstate_poor_percent, rural_OPA_poor_percent, urban_OPA_poor_percent) %>% 
@@ -107,12 +103,14 @@ create_maps(d_map, c("urban_interstate_poor_percent_rank"))
 ```
 
 # Congestion
+
 ```{r}
 AHR_data_2022 %>% filter(state != "United States") %>% 
   select(state, state_avg_congestion_hours) %>% 
   datatable()
   
 ```
+
 ```{r}
 create_maps(d_map, c("state_avg_congestion_hours_rank"))
 
@@ -130,21 +128,14 @@ AHR_data_2022 %>% filter(state != "United States") %>%
 create_maps(d_map, c("poor_bridges_percent_rank"))
 ```
 
-
 # Fatality
 
 ```{r}
 
 AHR_data_2022 %>% filter(state != "United States") %>% 
-  select(state, rural_fatalities_per_100m_VMT, urban_fatalities_per_100m_VMT, 
-         total_fatalities_per_100m_VMT) %>% 
+  select(state, contains("fatalities")) %>% 
   datatable()
 ```
-
-```{r}
-create_maps(d_map, c("total_fatalities_per_100m_VMT_rank"))
-```
-
 
 # Comparing 2021 - 2022
 
@@ -154,15 +145,20 @@ All values of 2021 minus all values of 2022.
 
 ```{r}
 
-# calculate the change across all columns except the 1st = state name
-change <- AHR_data_2022[,-1] - AHR_data_2021[,-1]
+
+allranks_22 <- AHR_data_2022 %>% select(state, contains("rank")) %>% arrange(state)
+allranks_21 <- AHR_data_2021 %>% select(state, contains("rank")) %>% 
+  select(-rank_26th_report) %>% 
+  rename(state_avg_congestion_hours_rank = state_avg_delay_hours_rank) %>% 
+  arrange(state)
+
+change <- allranks_22[,-1] - allranks_21[,-1]
 
 # adding state name back 
 change_2021_2022 <- cbind(state = AHR_data_2022[, "state"], change) %>% 
    mutate_if(is.numeric, ~round(., 2))
 
 change_2021_2022 %>% write.csv("output/change_2021_2022.csv")
-
 
 datatable(change_2021_2022)
 
@@ -190,6 +186,3 @@ change_2021_2022 %>% select(state, overall_score_rank) %>% arrange(overall_score
 
 ggplotly(p_change, tooltip = "text")
 ```
-
-
-

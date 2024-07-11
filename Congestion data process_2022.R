@@ -144,9 +144,6 @@ congestion_data_summary <- congestion_data_final %>%
             state_tot_commuters = sum(adjusted_auto_commuters_combined)) %>% 
   ungroup() 
 
-  # left_join(df_state, by = c("state" = "state.abb")) %>% 
-  # select(-state) %>% 
-  # rename(state = state.name) 
 
 
 
