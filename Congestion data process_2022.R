@@ -10,12 +10,17 @@ library(rio)
 inrix <- read_csv("data/2022/delay_hour_2022_US_urban_area.csv") %>% 
          mutate(state = str_extract(urban_area, ".{2}$"),
                  city = str_replace(urban_area, ".{2}$", ""),
+                 city = str_remove_all(city, "(City)|(Township)"),
                  city = str_trim(city)) %>% select(-urban_area) %>% select(-1)
-  
+
+# NOTE: the following 2 summary points indicates NOTHING about congestion in the states. Just to view what is collected by INRIX. 
 # count number of cities collected by state
 inrix %>% add_count(state) %>% arrange(desc(n)) %>% 
-  select(state, n) %>% distinct()
+  select(state, n) %>% distinct() 
 
+inrix %>% group_by(state) %>% mutate(tot_congestion_hr_state = sum(delay_2022)) %>% 
+  select(state, tot_congestion_hr_state) %>% distinct() %>% 
+  arrange(desc(tot_congestion_hr_state)) 
 
 #######Commuter_data_2022##########
 
@@ -26,6 +31,7 @@ inrix %>% add_count(state) %>% arrange(desc(n)) %>%
 # Note: Using either file to get data for metro area. 
 #ACSST1Y2022.S0802-Data_metro area.csv metro_area = 394,
 #data/2022/ACSST1Y2022.S0802-Data.csv -> # cities = 1040 rows
+
 
 commuter_data <- import("data/2022/ACSST1Y2022.S0802-Data_metro area.csv") %>% 
   select(V2, V205, V407) %>% 
@@ -68,6 +74,19 @@ congestion_data <- commuter_data_clean %>%
   ungroup() %>% 
   select(first_state, first_city, auto_commuters_combined, avg_congestion_hours)
   
+congestion_data %>% filter(is.na(avg_congestion_hours))
+
+
+#Cities in INRIX but not in commuter data
+anti_join(inrix, 
+          congestion_data %>% filter(!is.na(avg_congestion_hours)), 
+          by = c("city" = "first_city"))-> inrixcity_wo_commuter
+
+# cities commuter
+import("data/2022/ACSST1Y2022.S0802-Data.csv") %>% select(V2, V205, V407) %>% 
+  rename(area = 1, 
+         auto_commuters_alone = 2,
+         auto_commuters_carpooled = 3) %>% slice(-c(1:2)) -> city_commuters
 
 #Run a linear regression model to find the relationship between congestion hours (inrix data) 
 #and the number of auto commuters

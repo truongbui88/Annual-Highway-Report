@@ -43,10 +43,12 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 ```{r}
 #| echo: false
-AHR_data_2022 <- readxl::read_excel("output/AHR_data_2022.xlsx", sheet = 2) %>% arrange(state) 
+AHR_data_2022 <- readxl::read_excel("output/AHR_data_2022.xlsx", sheet = 2) %>% arrange(state) %>% 
+  mutate_if(is.numeric, ~round(., 2))
 
-# Data for last year report Truong sent via email on Feb 22, 2024. 
-AHR_data_2021 <- readxl::read_excel("data/2022/AHR_data 2022 alternative final 4.xlsx", sheet = 2) %>% arrange(state) 
+# Data for last year 27th report; Truong sent via email on Feb 22, 2024. 
+AHR_data_2021 <- readxl::read_excel("data/2022/AHR_data 2022 alternative final 4.xlsx", sheet = 2) %>% arrange(state) %>% 
+   mutate_if(is.numeric, ~round(., 2))
 
 
 ```
@@ -185,4 +187,18 @@ change_2021_2022 %>% select(state, overall_score_rank) %>% arrange(overall_score
   theme(axis.text.y = element_text(size = 6)) -> p_change
 
 ggplotly(p_change, tooltip = "text")
+```
+
+### Zoom in some biggest changes: New Jersey
+```{r}
+change_2021_2022 %>% 
+  filter(state == "New Jersey") %>% 
+  pivot_longer(cols = 2:15, names_to = "cat", values_to = "value") %>% 
+ggplot(aes(fct_reorder(cat, value), value)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Change in component rankings in New Jersey",
+       x = "") +
+  theme(axis.text.y = element_text(size = 6))
 ```

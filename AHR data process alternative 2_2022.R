@@ -79,6 +79,7 @@ SF_4 <- read_excel("data/2022/sf4.xlsx", sheet = "A") %>%
 # write_csv(SF_4_adjusted, "SF_4_adjusted_coliIndex_urbanDvmtIndex.csv")
   
 #HM-64: Miles by measured pavement roughness
+#NOTE: Delaware doesn't have data on sheet A, hm64 
 HM64_rural_interstate <- read_excel("data/2022/hm64.xls", sheet = "A") %>% 
   remove_empty() %>% 
   select(1, 8:11) %>% 
@@ -230,12 +231,12 @@ AHR_perUnit <- AHR_combined %>%
     other_disbursement_perlm = other_disbursement / state_tot_lane_miles,
     
     #Pavement roughness (4 indicators)
-    rural_interstate_poor_percent = rural_interstate_above_170 / rural_interstate_total * 100,
-    urban_interstate_poor_percent = urban_interstate_above_170 / urban_interstate_total * 100,
-    rural_OPA_poor_percent = rural_OPA_above_220 / rural_OPA_total * 100,
-    urban_OPA_poor_percent = urban_OPA_above_220 / urban_OPA_total * 100,
+    rural_interstate_poor_percent_pavement_roughness = rural_interstate_above_170 / rural_interstate_total * 100,
+    urban_interstate_poor_percent_pavement_roughness = urban_interstate_above_170 / urban_interstate_total * 100,
+    rural_OPA_poor_percent_pavement_roughness = rural_OPA_above_220 / rural_OPA_total * 100,
+    urban_OPA_poor_percent_pavement_roughness = urban_OPA_above_220 / urban_OPA_total * 100,
    
-
+   
     #Congestion Hours
     state_avg_congestion_hours = state_tot_congestion_hours / state_tot_commuters,
     
@@ -279,7 +280,7 @@ disbursement_data <- disbursement_data %>%
 
 #Calculate scores and rankings
 scores <- AHR_perUnit %>% 
-  pivot_longer(cols = rural_interstate_poor_percent:other_fatalities_per_100m_VMT, 
+  pivot_longer(cols = rural_interstate_poor_percent_pavement_roughness:other_fatalities_per_100m_VMT, 
                names_to = "key_metrics", 
                values_to = "value") %>% 
   arrange(key_metrics) %>% 
@@ -287,13 +288,19 @@ scores <- AHR_perUnit %>%
   group_by(key_metrics) %>% 
   mutate(exp_value = value[state == "United States"]) %>% 
   ungroup() %>% 
+    
+  # bind back to disbursement, making 13 metrics in total
   bind_rows(disbursement_data) %>% 
   mutate(relative_score = value / exp_value) %>% 
   select(state, key_metrics, relative_score) %>% 
+  
+  # return back to wider format to calculate over all score
   pivot_wider(names_from = key_metrics,
               values_from = relative_score) %>% 
   rowwise() %>% 
-  mutate(overall_score = mean(c_across(other_fatalities_per_100m_VMT:other_disbursement_perlm), na.rm = T)) %>% 
+  
+  # add ranking
+  mutate(overall_score = mean(c_across(2:14), na.rm = T)) %>% 
   ungroup() %>% 
   filter(state != "United States") %>% 
   mutate(across(c(2:15), min_rank, .names = "{.col}_rank")) 
